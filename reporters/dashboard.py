@@ -13,6 +13,7 @@ from collectors.system import SystemReport
 from collectors.process import ProcessReport
 from collectors.logs import LogReport
 from collectors.ports import PortReport
+from collectors.top import TopReport
 
 
 # ---------------------------------------------------------------------------
@@ -101,12 +102,19 @@ def render_system(system: SystemReport, thresholds: dict) -> str:
         f"  ├─ CPU {'.' * 14} {_bar(cpu.usage_percent, 15)} {cpu.usage_percent}%"
         f"  ({cpu.core_count} cores, load: {cpu.load_avg_1})"
         f"  {_status_icon(not cpu_crit, cpu_warn)}",
+        f"  │  {C.DIM}↳ user {cpu.user_percent}% · system {cpu.system_percent}% · "
+        f"iowait {cpu.iowait_percent}% · steal {cpu.steal_percent}% · "
+        f"idle {cpu.idle_percent}%{C.RESET}",
     ]
 
     if cpu.steal_percent > 1.0:
         lines.append(
             f"  │  {C.YELLOW}↳ Steal time: {cpu.steal_percent}% "
-            f"(EC2 CPU throttling detected){C.RESET}"
+            f"(EC2 CPU throttling / credit exhaustion){C.RESET}"
+        )
+    if cpu.iowait_percent >= 10:
+        lines.append(
+            f"  │  {C.YELLOW}↳ High iowait — CPU waiting on disk/EBS{C.RESET}"
         )
 
     lines.append(
@@ -114,10 +122,15 @@ def render_system(system: SystemReport, thresholds: dict) -> str:
         f"{_fmt_bytes(mem.used_bytes)} / {_fmt_bytes(mem.total_bytes)}  ({mem.used_percent}%)"
         f"  {_status_icon(not mem_warn, mem_warn)}"
     )
+    lines.append(
+        f"  │  {C.DIM}↳ apps ~{_fmt_bytes(mem.app_bytes)} · cache {_fmt_bytes(mem.cached_bytes)} · "
+        f"available {_fmt_bytes(mem.available_bytes)}{C.RESET}"
+    )
 
-    if mem.swap_used_percent > thresholds.get("swap_warn", 50):
+    if mem.swap_used_percent > thresholds.get("swap_warn", 50) or mem.swap_used_percent >= 10:
+        color = C.RED if mem.swap_used_percent >= 30 else C.YELLOW
         lines.append(
-            f"  │  {C.YELLOW}↳ Swap: {_fmt_bytes(mem.swap_used_bytes)} / "
+            f"  │  {color}↳ Swap: {_fmt_bytes(mem.swap_used_bytes)} / "
             f"{_fmt_bytes(mem.swap_total_bytes)} ({mem.swap_used_percent}%){C.RESET}"
         )
 
@@ -188,6 +201,65 @@ def render_processes(proc_report: ProcessReport) -> str:
             lines.append(
                 f"  {prefix} {p.name} (pid {p.pid}) {'.' * max(1, 15 - len(p.name))} "
                 f"{icon} {status_str}  (cpu: {cpu_str}, mem: {mem_str})"
+            )
+
+    return "\n".join(lines)
+
+
+def render_diagnosis(diagnosis) -> str:
+    if diagnosis is None:
+        return ""
+    health_color = C.GREEN
+    if diagnosis.health == "critical":
+        health_color = C.RED
+    elif diagnosis.health == "degraded":
+        health_color = C.YELLOW
+
+    lines = [
+        f"\n  {C.BOLD}WHY IS THIS SLOW?{C.RESET}  {health_color}{diagnosis.headline}{C.RESET}",
+        f"  {C.CYAN}{diagnosis.summary}{C.RESET}",
+        f"\n  {C.BOLD}WHERE IS THE CPU GOING?{C.RESET}",
+        f"  {diagnosis.cpu_story}",
+        f"\n  {C.BOLD}WHERE IS THE MEMORY GOING?{C.RESET}",
+        f"  {diagnosis.memory_story}",
+    ]
+
+    actionable = [f for f in diagnosis.findings if f.severity in ("critical", "warning")]
+    if actionable:
+        lines.append(f"\n  {C.BOLD}SAY THIS ON THE CALL{C.RESET}")
+        for i, f in enumerate(actionable[:5]):
+            icon = "❌" if f.severity == "critical" else "⚠️ "
+            lines.append(f"  {icon} {f.say_this}")
+            lines.append(f"     → {C.DIM}{f.next_step}{C.RESET}")
+
+    return "\n".join(lines)
+
+
+def render_top(top_report: Optional[TopReport]) -> str:
+    if top_report is None:
+        return ""
+    lines = [f"\n  {C.BOLD}TOP CONSUMERS{C.RESET} (sampled {top_report.sample_seconds:.1f}s)"]
+
+    lines.append(f"  {C.DIM}By CPU{C.RESET}")
+    if not top_report.by_cpu:
+        lines.append(f"  └─ {C.DIM}quiet — no significant CPU users{C.RESET}")
+    else:
+        for i, p in enumerate(top_report.by_cpu[:6]):
+            prefix = "└─" if i == min(len(top_report.by_cpu), 6) - 1 else "├─"
+            lines.append(
+                f"  {prefix} {p.cpu_percent:5.1f}%  pid {p.pid:<6}  {p.name:<16}  "
+                f"{C.DIM}{p.cmdline[:40]}{C.RESET}"
+            )
+
+    lines.append(f"  {C.DIM}By memory (RSS){C.RESET}")
+    if not top_report.by_memory:
+        lines.append(f"  └─ {C.DIM}no memory data{C.RESET}")
+    else:
+        for i, p in enumerate(top_report.by_memory[:6]):
+            prefix = "└─" if i == min(len(top_report.by_memory), 6) - 1 else "├─"
+            lines.append(
+                f"  {prefix} {p.memory_mb:7.1f} MB ({p.memory_percent:4.1f}%)  "
+                f"pid {p.pid:<6}  {p.name}"
             )
 
     return "\n".join(lines)
@@ -439,11 +511,15 @@ def render_full_report(
     log_report: LogReport,
     docker_report: DockerReport,
     thresholds: dict,
+    top_report: Optional[TopReport] = None,
+    diagnosis=None,
 ) -> str:
     """Render the complete terminal dashboard."""
     sections = [
         render_header(system),
+        render_diagnosis(diagnosis),
         render_system(system, thresholds),
+        render_top(top_report),
         render_disks(system, thresholds),
         render_processes(proc_report),
         render_docker(docker_report),

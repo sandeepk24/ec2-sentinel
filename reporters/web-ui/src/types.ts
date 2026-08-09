@@ -6,6 +6,35 @@ export interface HostInfo {
   uptime_seconds: number;
 }
 
+export interface TopProcess {
+  pid: number;
+  name: string;
+  cmdline: string;
+  cpu_percent: number;
+  memory_mb: number;
+  memory_percent: number;
+}
+
+export interface Finding {
+  severity: "ok" | "info" | "warning" | "critical";
+  category: string;
+  title: string;
+  what: string;
+  why_it_matters: string;
+  say_this: string;
+  next_step: string;
+}
+
+export interface Diagnosis {
+  headline: string;
+  summary: string;
+  health: "healthy" | "degraded" | "critical";
+  cpu_story: string;
+  memory_story: string;
+  talk_track: string[];
+  findings: Finding[];
+}
+
 export interface Report {
   timestamp: string;
   host: HostInfo;
@@ -14,12 +43,26 @@ export interface Report {
     cores: number;
     load_avg: number[];
     steal_percent: number;
+    user_percent?: number;
+    system_percent?: number;
+    iowait_percent?: number;
+    idle_percent?: number;
+    irq_percent?: number;
+    load_per_core?: number;
   };
   memory: {
     used_percent: number;
     used_bytes: number;
     total_bytes: number;
+    available_bytes?: number;
+    available_percent?: number;
+    swap_used_percent: number;
+    swap_used_bytes?: number;
     oom_kills: number;
+    app_bytes?: number;
+    cached_bytes?: number;
+    buffers_bytes?: number;
+    free_bytes?: number;
   };
   disks: Array<{
     mount: string;
@@ -28,6 +71,12 @@ export interface Report {
     total_bytes: number;
     days_until_full: number | null;
   }>;
+  top?: {
+    by_cpu: TopProcess[];
+    by_memory: TopProcess[];
+    sample_seconds: number;
+  };
+  diagnosis?: Diagnosis;
   processes: Array<{
     name: string;
     status: string;

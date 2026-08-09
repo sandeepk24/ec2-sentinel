@@ -26,6 +26,11 @@ class CpuSnapshot:
     load_avg_5: float
     load_avg_15: float
     steal_percent: float  # nonzero = noisy neighbor or T-series credit exhaustion
+    user_percent: float = 0.0
+    system_percent: float = 0.0
+    iowait_percent: float = 0.0
+    idle_percent: float = 0.0
+    irq_percent: float = 0.0
 
     @property
     def load_per_core(self) -> float:
@@ -44,12 +49,24 @@ class MemorySnapshot:
     swap_total_bytes: int
     swap_used_bytes: int
     oom_kill_count: int  # from /proc — how many OOM kills since boot
+    buffers_bytes: int = 0
+    cached_bytes: int = 0
+    free_bytes: int = 0
+    shared_bytes: int = 0
+    # App memory ≈ used - buffers - cached (rough, for storytelling)
+    app_bytes: int = 0
 
     @property
     def used_percent(self) -> float:
         if self.total_bytes == 0:
             return 0.0
         return round((self.used_bytes / self.total_bytes) * 100, 1)
+
+    @property
+    def available_percent(self) -> float:
+        if self.total_bytes == 0:
+            return 0.0
+        return round((self.available_bytes / self.total_bytes) * 100, 1)
 
     @property
     def swap_used_percent(self) -> float:
@@ -159,12 +176,19 @@ def collect_cpu() -> CpuSnapshot:
     t2 = _read_stat()
 
     deltas = [t2[i] - t1[i] for i in range(len(t1))]
-    total = sum(deltas)
-    idle = deltas[3] + deltas[4]  # idle + iowait
+    total = max(sum(deltas), 1)
+    # user, nice, system, idle, iowait, irq, softirq, steal
+    user = deltas[0] + deltas[1]
+    system = deltas[2]
+    idle = deltas[3]
+    iowait = deltas[4]
+    irq = deltas[5] + deltas[6]
     steal = deltas[7] if len(deltas) > 7 else 0
 
-    usage = round(((total - idle) / max(total, 1)) * 100, 1)
-    steal_pct = round((steal / max(total, 1)) * 100, 1)
+    def pct(v: int) -> float:
+        return round((v / total) * 100, 1)
+
+    usage = round(((total - idle - iowait) / total) * 100, 1)
     core_count = os.cpu_count() or 1
     load1, load5, load15 = os.getloadavg()
 
@@ -174,7 +198,12 @@ def collect_cpu() -> CpuSnapshot:
         load_avg_1=round(load1, 2),
         load_avg_5=round(load5, 2),
         load_avg_15=round(load15, 2),
-        steal_percent=steal_pct,
+        steal_percent=pct(steal),
+        user_percent=pct(user),
+        system_percent=pct(system),
+        iowait_percent=pct(iowait),
+        idle_percent=pct(idle),
+        irq_percent=pct(irq),
     )
 
 
@@ -190,7 +219,13 @@ def collect_memory() -> MemorySnapshot:
 
     total = info.get("MemTotal", 0)
     available = info.get("MemAvailable", info.get("MemFree", 0))
+    free = info.get("MemFree", 0)
+    buffers = info.get("Buffers", 0)
+    cached = info.get("Cached", 0) + info.get("SReclaimable", 0)
+    shared = info.get("Shmem", 0)
     used = total - available
+    # Rough app footprint: what's not free and not reclaimable cache/buffers
+    app = max(total - free - buffers - cached, 0)
     swap_total = info.get("SwapTotal", 0)
     swap_free = info.get("SwapFree", 0)
     swap_used = swap_total - swap_free
@@ -213,6 +248,11 @@ def collect_memory() -> MemorySnapshot:
         swap_total_bytes=swap_total,
         swap_used_bytes=swap_used,
         oom_kill_count=oom_count,
+        buffers_bytes=buffers,
+        cached_bytes=cached,
+        free_bytes=free,
+        shared_bytes=shared,
+        app_bytes=app,
     )
 
 

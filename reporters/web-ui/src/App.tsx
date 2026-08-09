@@ -62,7 +62,7 @@ export default function App() {
                   EC2 Sentinel
                 </span>
                 <span className="ml-2 text-lg font-medium text-slate-400">
-                  Health Dashboard
+                  Why is this slow?
                 </span>
               </h1>
             </div>

@@ -26,11 +26,13 @@ from typing import Any
 import yaml
 
 from alerts import Alert, dispatch_alerts
+from analyzers.diagnose import diagnose, diagnosis_to_dict
 from collectors.docker import collect_docker, reclaimable_bytes
 from collectors.system import collect_system
 from collectors.process import collect_processes
 from collectors.logs import collect_logs
 from collectors.ports import collect_ports
+from collectors.top import collect_top
 from reporters.dashboard import build_verdict_dict, render_full_report
 from reporters.web_server import load_fleet_reports, run_web_server
 
@@ -283,8 +285,29 @@ def generate_alerts(
 # Report serialization
 # ---------------------------------------------------------------------------
 
-def report_to_dict(system, proc_report, port_report, log_report, docker_report) -> dict:
+def report_to_dict(
+    system, proc_report, port_report, log_report, docker_report,
+    top_report=None, diagnosis=None,
+) -> dict:
     """Convert all reports to a JSON-serializable dict."""
+    top_report = top_report or collect_top(limit=8, sample_seconds=0.5)
+    diagnosis = diagnosis or diagnose(
+        system, top_report, docker_report, proc_report, port_report, log_report,
+    )
+
+    def _top_list(rows):
+        return [
+            {
+                "pid": p.pid,
+                "name": p.name,
+                "cmdline": p.cmdline,
+                "cpu_percent": p.cpu_percent,
+                "memory_mb": p.memory_mb,
+                "memory_percent": p.memory_percent,
+            }
+            for p in rows
+        ]
+
     return {
         "timestamp": system.timestamp,
         "host": {
@@ -299,13 +322,26 @@ def report_to_dict(system, proc_report, port_report, log_report, docker_report) 
             "cores": system.cpu.core_count,
             "load_avg": [system.cpu.load_avg_1, system.cpu.load_avg_5, system.cpu.load_avg_15],
             "steal_percent": system.cpu.steal_percent,
+            "user_percent": system.cpu.user_percent,
+            "system_percent": system.cpu.system_percent,
+            "iowait_percent": system.cpu.iowait_percent,
+            "idle_percent": system.cpu.idle_percent,
+            "irq_percent": system.cpu.irq_percent,
+            "load_per_core": system.cpu.load_per_core,
         },
         "memory": {
             "used_percent": system.memory.used_percent,
             "used_bytes": system.memory.used_bytes,
             "total_bytes": system.memory.total_bytes,
+            "available_bytes": system.memory.available_bytes,
+            "available_percent": system.memory.available_percent,
             "swap_used_percent": system.memory.swap_used_percent,
+            "swap_used_bytes": system.memory.swap_used_bytes,
             "oom_kills": system.memory.oom_kill_count,
+            "app_bytes": system.memory.app_bytes,
+            "cached_bytes": system.memory.cached_bytes,
+            "buffers_bytes": system.memory.buffers_bytes,
+            "free_bytes": system.memory.free_bytes,
         },
         "disks": [
             {
@@ -317,6 +353,12 @@ def report_to_dict(system, proc_report, port_report, log_report, docker_report) 
             }
             for d in system.disks
         ],
+        "top": {
+            "by_cpu": _top_list(top_report.by_cpu),
+            "by_memory": _top_list(top_report.by_memory),
+            "sample_seconds": top_report.sample_seconds,
+        },
+        "diagnosis": diagnosis_to_dict(diagnosis),
         "processes": [
             {
                 "name": p.name,
@@ -412,6 +454,10 @@ def run_scan(config: dict) -> dict:
     port_report = collect_ports(port_cfgs)
     log_report = collect_logs(log_patterns, log_files)
     docker_report = collect_docker(docker_cfg)
+    top_report = collect_top(limit=8, sample_seconds=1.0)
+    diagnosis = diagnose(
+        system, top_report, docker_report, proc_report, port_report, log_report, thresholds,
+    )
     hostname = config.get("sentinel", {}).get("hostname_override", system.ec2.hostname)
     alerts = generate_alerts(
         system, proc_report, port_report, log_report, docker_report,
@@ -424,6 +470,8 @@ def run_scan(config: dict) -> dict:
         "port_report": port_report,
         "log_report": log_report,
         "docker_report": docker_report,
+        "top_report": top_report,
+        "diagnosis": diagnosis,
         "docker_cfg": docker_cfg,
         "thresholds": thresholds,
         "hostname": hostname,
@@ -439,12 +487,17 @@ def build_health_payload(config: dict, reports_dir: Path | None = None) -> dict:
     port_report = scan["port_report"]
     log_report = scan["log_report"]
     docker_report = scan["docker_report"]
+    top_report = scan["top_report"]
+    diagnosis = scan["diagnosis"]
     thresholds = scan["thresholds"]
     alerts = scan["alerts"]
 
     live = {
         "source": "live",
-        "report": report_to_dict(system, proc_report, port_report, log_report, docker_report),
+        "report": report_to_dict(
+            system, proc_report, port_report, log_report, docker_report,
+            top_report, diagnosis,
+        ),
         "alerts": [alert_to_dict(a) for a in alerts],
         "verdict": build_verdict_dict(
             system, proc_report, port_report, log_report, docker_report, thresholds
@@ -480,15 +533,21 @@ def run_once(config: dict, output_json: bool = False) -> int:
     port_report = scan["port_report"]
     log_report = scan["log_report"]
     docker_report = scan["docker_report"]
+    top_report = scan["top_report"]
+    diagnosis = scan["diagnosis"]
     thresholds = scan["thresholds"]
     alerts = scan["alerts"]
 
     if output_json:
-        data = report_to_dict(system, proc_report, port_report, log_report, docker_report)
+        data = report_to_dict(
+            system, proc_report, port_report, log_report, docker_report,
+            top_report, diagnosis,
+        )
         print(json.dumps(data, indent=2))
     else:
         print(render_full_report(
-            system, proc_report, port_report, log_report, docker_report, thresholds
+            system, proc_report, port_report, log_report, docker_report,
+            thresholds, top_report, diagnosis,
         ))
 
     # Dispatch alerts
@@ -551,9 +610,15 @@ def run_watch(config: dict) -> None:
         port_report = collect_ports(port_cfgs)
         log_report = collect_logs(log_patterns, log_files)
         docker_report = collect_docker(docker_cfg)
+        top_report = collect_top(limit=8, sample_seconds=1.0)
+        diagnosis = diagnose(
+            system, top_report, docker_report, proc_report, port_report,
+            log_report, thresholds,
+        )
 
         print(render_full_report(
-            system, proc_report, port_report, log_report, docker_report, thresholds
+            system, proc_report, port_report, log_report, docker_report,
+            thresholds, top_report, diagnosis,
         ))
         print(f"  Refreshing every {interval}s. Press Ctrl+C to stop.")
 
@@ -606,6 +671,11 @@ def run_daemon(config: dict) -> None:
             port_report = collect_ports(port_cfgs)
             log_report = collect_logs(log_patterns, log_files)
             docker_report = collect_docker(docker_cfg)
+            top_report = collect_top(limit=8, sample_seconds=1.0)
+            diagnosis = diagnose(
+                system, top_report, docker_report, proc_report, port_report,
+                log_report, thresholds,
+            )
 
             hostname = config.get("sentinel", {}).get("hostname_override", system.ec2.hostname)
             alerts = generate_alerts(
@@ -624,8 +694,11 @@ def run_daemon(config: dict) -> None:
             else:
                 logger.info("Health check passed — all clear")
 
-            # Also write JSON report to stdout for log aggregation
-            data = report_to_dict(system, proc_report, port_report, log_report, docker_report)
+            logger.info(f"Diagnosis: {diagnosis.headline} — {diagnosis.summary}")
+            data = report_to_dict(
+                system, proc_report, port_report, log_report, docker_report,
+                top_report, diagnosis,
+            )
             logger.debug(json.dumps(data))
 
         except Exception as e:

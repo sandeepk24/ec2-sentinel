@@ -56,8 +56,9 @@ If your daily routine looks anything like this, EC2 Sentinel was built for you:
 
 | Category | What's Checked | Why It Matters |
 |----------|---------------|----------------|
-| **CPU** | Usage, load average, per-core breakdown, steal time | Steal time on EC2 = noisy neighbor. Load avg > cores = trouble incoming. |
-| **Memory** | Used/available, swap usage, OOM kill count | Swap thrashing on a build server kills your pipeline. |
+| **CPU** | Usage breakdown (user/system/iowait/steal), load, top burners | Not just "% busy" — shows *where* cycles go and who is burning them. |
+| **Memory** | Apps vs cache vs available, swap, OOM, top RSS | Explains real pressure vs "Linux ate my RAM" cache myths. |
+| **Diagnosis** | Plain-English "why is this slow?" + talk track | Juniors can articulate the outage without guessing. |
 | **Disk** | Usage per mount, inode count, growth rate prediction | "/var/log filled up" is the #1 preventable outage. |
 | **Processes** | Named service health, PID tracking, restart detection | That JBoss instance restarted 5 times today? Now you'll know. |
 | **Ports** | TCP listener checks for known services | Tomcat not listening on 8080? Catch it before users do. |
@@ -357,7 +358,10 @@ ec2-sentinel/
 │   ├── process.py           # Service/process health and restart detection
 │   ├── logs.py              # Log file pattern scanning
 │   ├── ports.py             # TCP port/listener checks
-│   └── docker.py            # Docker containers, images, disk usage
+│   ├── docker.py            # Docker containers, images, disk usage
+│   └── top.py               # Top CPU / memory consumers
+├── analyzers/
+│   └── diagnose.py          # Why-is-this-slow narrative for juniors
 ├── reporters/
 │   ├── __init__.py
 │   ├── dashboard.py         # Terminal output and formatting

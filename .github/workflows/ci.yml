@@ -43,6 +43,8 @@ jobs:
           python -c "from collectors.logs import collect_logs"
           python -c "from collectors.ports import collect_ports"
           python -c "from collectors.docker import collect_docker"
+          python -c "from collectors.top import collect_top"
+          python -c "from analyzers.diagnose import diagnose"
           python -c "from alerts import Alert, dispatch_alerts"
 
       - name: Smoke test — system collection
@@ -79,6 +81,22 @@ jobs:
           if report.error:
               print(f'Note: {report.error}')
           print('Docker collector works')
+          "
+
+      - name: Smoke test — top consumers + diagnosis
+        run: |
+          python -c "
+          from collectors.system import collect_system
+          from collectors.top import collect_top
+          from analyzers.diagnose import diagnose, diagnosis_to_dict
+          system = collect_system()
+          top = collect_top(limit=5, sample_seconds=0.5)
+          d = diagnose(system, top)
+          assert d.headline and d.cpu_story and d.memory_story
+          print(d.headline)
+          print(d.summary)
+          print(f'Top CPU: {len(top.by_cpu)}, Top MEM: {len(top.by_memory)}')
+          print('Diagnosis works')
           "
 
       - name: Smoke test — log scanner

@@ -8,6 +8,7 @@ import {
   statusColor,
 } from "../utils";
 import type { Alert, HostPayload } from "../types";
+import { DiagnosisPanel } from "./DiagnosisPanel";
 
 interface Props {
   host: HostPayload;
@@ -117,11 +118,13 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
         </span>
       </div>
 
+      <DiagnosisPanel report={r} />
+
       <div className="grid gap-4 md:grid-cols-3">
         <MetricCard
           label="CPU"
           value={`${r.cpu.usage_percent}%`}
-          sub={`Load ${r.cpu.load_avg[0]?.toFixed(2) ?? "—"} · ${r.cpu.cores} cores · steal ${r.cpu.steal_percent}%`}
+          sub={`Load ${r.cpu.load_avg[0]?.toFixed(2) ?? "—"} · ${r.cpu.cores} cores · user ${r.cpu.user_percent ?? 0}% / iowait ${r.cpu.iowait_percent ?? 0}% / steal ${r.cpu.steal_percent}%`}
           pct={r.cpu.usage_percent}
           warn={t.cpu_warn ?? 80}
           crit={t.cpu_crit ?? 95}
@@ -130,7 +133,7 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
         <MetricCard
           label="Memory"
           value={`${r.memory.used_percent}%`}
-          sub={`${fmtBytes(r.memory.used_bytes)} / ${fmtBytes(r.memory.total_bytes)} · OOM ${r.memory.oom_kills}`}
+          sub={`${fmtBytes(r.memory.available_bytes ?? r.memory.total_bytes - r.memory.used_bytes)} available · apps ~${fmtBytes(r.memory.app_bytes)} · swap ${r.memory.swap_used_percent}%`}
           pct={r.memory.used_percent}
           warn={t.memory_warn ?? 80}
           crit={t.memory_crit ?? 95}
