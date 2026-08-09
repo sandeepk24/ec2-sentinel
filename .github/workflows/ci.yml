@@ -42,6 +42,7 @@ jobs:
           python -c "from collectors.process import collect_processes"
           python -c "from collectors.logs import collect_logs"
           python -c "from collectors.ports import collect_ports"
+          python -c "from collectors.docker import collect_docker"
           python -c "from alerts import Alert, dispatch_alerts"
 
       - name: Smoke test — system collection
@@ -67,6 +68,17 @@ jobs:
           assert len(report.checks) == 1
           assert not report.checks[0].is_open
           print('Port check works')
+          "
+
+      - name: Smoke test — docker collector
+        run: |
+          python -c "
+          from collectors.docker import collect_docker
+          report = collect_docker({'enabled': True})
+          print(f'Docker available: {report.available}')
+          if report.error:
+              print(f'Note: {report.error}')
+          print('Docker collector works')
           "
 
       - name: Smoke test — log scanner

@@ -2,6 +2,7 @@ import {
   fmtBytes,
   fmtTime,
   fmtUptime,
+  dockerStateColor,
   levelForPercent,
   levelStyles,
   statusColor,
@@ -230,6 +231,84 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
         />
       </div>
 
+      {r.docker?.available && (
+        <div className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-4">
+            <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4 backdrop-blur-xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300/70">
+                Docker
+              </p>
+              <p className="mt-2 font-mono text-lg font-bold text-cyan-200">
+                v{r.docker.server_version}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 backdrop-blur-xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300/70">
+                Containers
+              </p>
+              <p className="mt-2 font-mono text-2xl font-bold text-white">
+                {r.docker.running_count}
+                <span className="ml-1 text-base font-normal text-slate-500">
+                  / {r.docker.running_count + r.docker.stopped_count} running
+                </span>
+              </p>
+              {r.docker.stopped_count > 0 && (
+                <p className="mt-1 text-sm text-amber-300">
+                  {r.docker.stopped_count} stopped
+                </p>
+              )}
+            </div>
+            <div className="rounded-2xl border border-violet-500/20 bg-violet-500/5 p-4 backdrop-blur-xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-300/70">
+                Images
+              </p>
+              <p className="mt-2 font-mono text-2xl font-bold text-white">
+                {r.docker.image_count}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-fuchsia-500/20 bg-fuchsia-500/5 p-4 backdrop-blur-xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-fuchsia-300/70">
+                Reclaimable
+              </p>
+              <p className="mt-2 font-mono text-lg font-bold text-fuchsia-200">
+                {r.docker.disk.images_reclaimable}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                images {r.docker.disk.images_size}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <DataTable
+              title="Containers"
+              headers={["Name", "Image", "State", "Status"]}
+              rows={(r.docker.containers ?? []).map((c) => [
+                c.name,
+                c.image.length > 28 ? c.image.slice(0, 28) + "…" : c.image,
+                c.state,
+                c.status.length > 40 ? c.status.slice(0, 40) + "…" : c.status,
+              ])}
+              rowClass={(rowIdx) => {
+                const c = r.docker!.containers[rowIdx];
+                return { stateCol: dockerStateColor(c.state, c.health) };
+              }}
+              statusCol={2}
+            />
+            <DataTable
+              title="Images"
+              headers={["Repository", "Tag", "Size", "Age"]}
+              rows={(r.docker.images ?? []).map((img) => [
+                img.repository,
+                img.tag,
+                img.size,
+                img.created_since || "—",
+              ])}
+            />
+          </div>
+        </div>
+      )}
+
       {r.log_matches?.length > 0 && (
         <DataTable
           title="Log patterns"
@@ -257,12 +336,14 @@ function DataTable({
   rows,
   statusCol,
   warnCol,
+  rowClass,
 }: {
   title: string;
   headers: string[];
   rows: string[][];
   statusCol?: number;
   warnCol?: number;
+  rowClass?: (rowIdx: number) => { stateCol?: string };
 }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl">
@@ -298,18 +379,22 @@ function DataTable({
                   key={i}
                   className="border-t border-white/5 hover:bg-white/[0.02]"
                 >
-                  {row.map((cell, j) => (
-                    <td
-                      key={j}
-                      className={`px-5 py-3 ${
-                        j === statusCol ? statusColor(cell) + " font-semibold" : ""
-                      } ${j === warnCol && cell !== "0" ? "text-amber-300 font-semibold" : ""} ${
-                        j === 0 ? "font-medium text-slate-200" : "text-slate-400"
-                      }`}
-                    >
-                      {cell}
-                    </td>
-                  ))}
+                  {row.map((cell, j) => {
+                    const extra = rowClass?.(i);
+                    const cls =
+                      j === statusCol
+                        ? (extra?.stateCol || statusColor(cell)) + " font-semibold"
+                        : j === warnCol && cell !== "0"
+                          ? "text-amber-300 font-semibold"
+                          : j === 0
+                            ? "font-medium text-slate-200"
+                            : "text-slate-400";
+                    return (
+                      <td key={j} className={`px-5 py-3 ${cls}`}>
+                        {cell}
+                      </td>
+                    );
+                  })}
                 </tr>
               ))
             )}

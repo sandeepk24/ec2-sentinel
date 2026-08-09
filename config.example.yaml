@@ -25,6 +25,21 @@ thresholds:
   swap_warn: 50                  # swap thrashing kills build servers
 
 # ---------------------------------------------------------------------------
+# Docker — containers and images (auto-detected when docker CLI is available)
+# ---------------------------------------------------------------------------
+docker:
+  enabled: true                  # set false to skip docker checks
+  disk_reclaim_warn_gb: 5        # warn when reclaimable docker disk exceeds this
+  images_warn_count: 50          # warn when stored image count exceeds this
+
+  # Optional: containers that MUST be running
+  containers:
+    # - name: nginx
+    #   match: "nginx"
+    # - name: api
+    #   match: "myapp-api"
+
+# ---------------------------------------------------------------------------
 # Processes — the services YOU care about on THIS server
 # ---------------------------------------------------------------------------
 # Each entry:

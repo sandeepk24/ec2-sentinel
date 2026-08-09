@@ -46,6 +46,39 @@ export interface Report {
     count: number;
     file: string;
   }>;
+  docker?: {
+    available: boolean;
+    server_version: string;
+    error: string;
+    running_count: number;
+    stopped_count: number;
+    image_count: number;
+    disk: {
+      images_size: string;
+      images_reclaimable: string;
+      containers_size: string;
+      containers_reclaimable: string;
+      volumes_size: string;
+      volumes_reclaimable: string;
+      build_cache_reclaimable: string;
+    };
+    containers: Array<{
+      id: string;
+      name: string;
+      image: string;
+      state: string;
+      status: string;
+      ports: string;
+      health: string | null;
+    }>;
+    images: Array<{
+      repository: string;
+      tag: string;
+      id: string;
+      size: string;
+      created_since: string;
+    }>;
+  };
 }
 
 export interface Alert {

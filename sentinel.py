@@ -26,6 +26,7 @@ from typing import Any
 import yaml
 
 from alerts import Alert, dispatch_alerts
+from collectors.docker import collect_docker, reclaimable_bytes
 from collectors.system import collect_system
 from collectors.process import collect_processes
 from collectors.logs import collect_logs
@@ -114,11 +115,18 @@ def get_log_config(config: dict) -> tuple[list[str], list[str]]:
     return patterns, files
 
 
+def get_docker_config(config: dict) -> dict:
+    """Docker monitoring config — enabled by default when docker is present."""
+    return config.get("docker", {"enabled": True})
+
+
 # ---------------------------------------------------------------------------
 # Alert generation
 # ---------------------------------------------------------------------------
 
-def generate_alerts(system, proc_report, port_report, log_report, thresholds, hostname) -> list[Alert]:
+def generate_alerts(
+    system, proc_report, port_report, log_report, docker_report, thresholds, hostname, docker_cfg,
+) -> list[Alert]:
     """Evaluate all reports against thresholds, produce alerts."""
     alerts = []
     now = datetime.now(timezone.utc).isoformat()
@@ -220,6 +228,54 @@ def generate_alerts(system, proc_report, port_report, log_report, thresholds, ho
             hostname=hostname, timestamp=now, source="logs",
         ))
 
+    # Docker
+    if docker_report.available:
+        for exp in docker_report.missing_expected:
+            if not exp.found:
+                alerts.append(Alert(
+                    severity="critical", title=f"Docker Container Missing: {exp.name}",
+                    message=f"Expected container '{exp.name}' (match: {exp.match}) not found",
+                    hostname=hostname, timestamp=now, source="docker",
+                ))
+            elif not exp.running:
+                alerts.append(Alert(
+                    severity="critical", title=f"Docker Container Stopped: {exp.name}",
+                    message=f"Container '{exp.matched_container or exp.name}' is not running",
+                    hostname=hostname, timestamp=now, source="docker",
+                ))
+
+        for c in docker_report.unhealthy:
+            alerts.append(Alert(
+                severity="critical", title=f"Docker Unhealthy: {c.name}",
+                message=f"Container {c.name} ({c.image}) — {c.status}",
+                hostname=hostname, timestamp=now, source="docker",
+            ))
+
+        for c in docker_report.containers:
+            if c.state == "restarting":
+                alerts.append(Alert(
+                    severity="warning", title=f"Docker Restarting: {c.name}",
+                    message=f"Container {c.name} is in a restart loop — {c.status}",
+                    hostname=hostname, timestamp=now, source="docker",
+                ))
+
+        reclaim_gb = reclaimable_bytes(docker_report.disk) / (1024 ** 3)
+        disk_warn_gb = docker_cfg.get("disk_reclaim_warn_gb", 5)
+        if reclaim_gb >= disk_warn_gb:
+            alerts.append(Alert(
+                severity="warning", title="Docker Disk Reclaimable High",
+                message=f"{reclaim_gb:.1f} GB reclaimable — run docker system prune",
+                hostname=hostname, timestamp=now, source="docker",
+            ))
+
+        images_warn = docker_cfg.get("images_warn_count", 50)
+        if len(docker_report.images) >= images_warn:
+            alerts.append(Alert(
+                severity="warning", title="Docker Image Count High",
+                message=f"{len(docker_report.images)} images stored (threshold: {images_warn})",
+                hostname=hostname, timestamp=now, source="docker",
+            ))
+
     return alerts
 
 
@@ -227,7 +283,7 @@ def generate_alerts(system, proc_report, port_report, log_report, thresholds, ho
 # Report serialization
 # ---------------------------------------------------------------------------
 
-def report_to_dict(system, proc_report, port_report, log_report) -> dict:
+def report_to_dict(system, proc_report, port_report, log_report, docker_report) -> dict:
     """Convert all reports to a JSON-serializable dict."""
     return {
         "timestamp": system.timestamp,
@@ -290,6 +346,45 @@ def report_to_dict(system, proc_report, port_report, log_report) -> dict:
             }
             for m in log_report.matches
         ],
+        "docker": {
+            "available": docker_report.available,
+            "server_version": docker_report.server_version,
+            "error": docker_report.error,
+            "running_count": docker_report.running_count,
+            "stopped_count": docker_report.stopped_count,
+            "image_count": len(docker_report.images),
+            "disk": {
+                "images_size": docker_report.disk.images_size,
+                "images_reclaimable": docker_report.disk.images_reclaimable,
+                "containers_size": docker_report.disk.containers_size,
+                "containers_reclaimable": docker_report.disk.containers_reclaimable,
+                "volumes_size": docker_report.disk.volumes_size,
+                "volumes_reclaimable": docker_report.disk.volumes_reclaimable,
+                "build_cache_reclaimable": docker_report.disk.build_cache_reclaimable,
+            },
+            "containers": [
+                {
+                    "id": c.id,
+                    "name": c.name,
+                    "image": c.image,
+                    "state": c.state,
+                    "status": c.status,
+                    "ports": c.ports,
+                    "health": c.health,
+                }
+                for c in docker_report.containers
+            ],
+            "images": [
+                {
+                    "repository": img.repository,
+                    "tag": img.tag,
+                    "id": img.id,
+                    "size": img.size,
+                    "created_since": img.created_since,
+                }
+                for img in docker_report.images[:20]
+            ],
+        },
     }
 
 
@@ -309,15 +404,18 @@ def run_scan(config: dict) -> dict:
     thresholds = get_thresholds(config)
     process_cfgs = get_process_configs(config)
     port_cfgs = get_port_configs(config)
+    docker_cfg = get_docker_config(config)
     log_patterns, log_files = get_log_config(config)
 
     system = collect_system()
     proc_report = collect_processes(process_cfgs)
     port_report = collect_ports(port_cfgs)
     log_report = collect_logs(log_patterns, log_files)
+    docker_report = collect_docker(docker_cfg)
     hostname = config.get("sentinel", {}).get("hostname_override", system.ec2.hostname)
     alerts = generate_alerts(
-        system, proc_report, port_report, log_report, thresholds, hostname
+        system, proc_report, port_report, log_report, docker_report,
+        thresholds, hostname, docker_cfg,
     )
 
     return {
@@ -325,6 +423,8 @@ def run_scan(config: dict) -> dict:
         "proc_report": proc_report,
         "port_report": port_report,
         "log_report": log_report,
+        "docker_report": docker_report,
+        "docker_cfg": docker_cfg,
         "thresholds": thresholds,
         "hostname": hostname,
         "alerts": alerts,
@@ -338,15 +438,16 @@ def build_health_payload(config: dict, reports_dir: Path | None = None) -> dict:
     proc_report = scan["proc_report"]
     port_report = scan["port_report"]
     log_report = scan["log_report"]
+    docker_report = scan["docker_report"]
     thresholds = scan["thresholds"]
     alerts = scan["alerts"]
 
     live = {
         "source": "live",
-        "report": report_to_dict(system, proc_report, port_report, log_report),
+        "report": report_to_dict(system, proc_report, port_report, log_report, docker_report),
         "alerts": [alert_to_dict(a) for a in alerts],
         "verdict": build_verdict_dict(
-            system, proc_report, port_report, log_report, thresholds
+            system, proc_report, port_report, log_report, docker_report, thresholds
         ),
     }
 
@@ -378,14 +479,17 @@ def run_once(config: dict, output_json: bool = False) -> int:
     proc_report = scan["proc_report"]
     port_report = scan["port_report"]
     log_report = scan["log_report"]
+    docker_report = scan["docker_report"]
     thresholds = scan["thresholds"]
     alerts = scan["alerts"]
 
     if output_json:
-        data = report_to_dict(system, proc_report, port_report, log_report)
+        data = report_to_dict(system, proc_report, port_report, log_report, docker_report)
         print(json.dumps(data, indent=2))
     else:
-        print(render_full_report(system, proc_report, port_report, log_report, thresholds))
+        print(render_full_report(
+            system, proc_report, port_report, log_report, docker_report, thresholds
+        ))
 
     # Dispatch alerts
     alert_cfg = config.get("alerts", {})
@@ -436,6 +540,7 @@ def run_watch(config: dict) -> None:
     process_cfgs = get_process_configs(config)
     port_cfgs = get_port_configs(config)
     log_patterns, log_files = get_log_config(config)
+    docker_cfg = get_docker_config(config)
 
     while running:
         # Clear screen
@@ -445,13 +550,19 @@ def run_watch(config: dict) -> None:
         proc_report = collect_processes(process_cfgs)
         port_report = collect_ports(port_cfgs)
         log_report = collect_logs(log_patterns, log_files)
+        docker_report = collect_docker(docker_cfg)
 
-        print(render_full_report(system, proc_report, port_report, log_report, thresholds))
+        print(render_full_report(
+            system, proc_report, port_report, log_report, docker_report, thresholds
+        ))
         print(f"  Refreshing every {interval}s. Press Ctrl+C to stop.")
 
         # Generate alerts in watch mode too
         hostname = config.get("sentinel", {}).get("hostname_override", system.ec2.hostname)
-        alerts = generate_alerts(system, proc_report, port_report, log_report, thresholds, hostname)
+        alerts = generate_alerts(
+            system, proc_report, port_report, log_report, docker_report,
+            thresholds, hostname, docker_cfg,
+        )
         alert_cfg = config.get("alerts", {})
         if alerts and any(v.get("enabled") for v in alert_cfg.values()):
             dispatch_alerts(alerts, alert_cfg)
@@ -486,6 +597,7 @@ def run_daemon(config: dict) -> None:
     process_cfgs = get_process_configs(config)
     port_cfgs = get_port_configs(config)
     log_patterns, log_files = get_log_config(config)
+    docker_cfg = get_docker_config(config)
 
     while running:
         try:
@@ -493,10 +605,12 @@ def run_daemon(config: dict) -> None:
             proc_report = collect_processes(process_cfgs)
             port_report = collect_ports(port_cfgs)
             log_report = collect_logs(log_patterns, log_files)
+            docker_report = collect_docker(docker_cfg)
 
             hostname = config.get("sentinel", {}).get("hostname_override", system.ec2.hostname)
             alerts = generate_alerts(
-                system, proc_report, port_report, log_report, thresholds, hostname
+                system, proc_report, port_report, log_report, docker_report,
+                thresholds, hostname, docker_cfg,
             )
 
             if alerts:
@@ -511,7 +625,7 @@ def run_daemon(config: dict) -> None:
                 logger.info("Health check passed — all clear")
 
             # Also write JSON report to stdout for log aggregation
-            data = report_to_dict(system, proc_report, port_report, log_report)
+            data = report_to_dict(system, proc_report, port_report, log_report, docker_report)
             logger.debug(json.dumps(data))
 
         except Exception as e:

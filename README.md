@@ -62,6 +62,7 @@ If your daily routine looks anything like this, EC2 Sentinel was built for you:
 | **Processes** | Named service health, PID tracking, restart detection | That JBoss instance restarted 5 times today? Now you'll know. |
 | **Ports** | TCP listener checks for known services | Tomcat not listening on 8080? Catch it before users do. |
 | **Logs** | Pattern scanning for errors, OOM, disk warnings | Grep at scale — find "OutOfMemoryError" across 30 log files. |
+| **Docker** | Containers, images, disk usage, health checks | Build servers and app hosts running Docker — catch stopped or unhealthy containers. |
 | **Network** | Connectivity to downstream dependencies | Your app is up but can't reach the database? That's this. |
 
 ## Deployment Model — Read This First
@@ -355,7 +356,8 @@ ec2-sentinel/
 │   ├── system.py            # CPU, memory, disk, network, EC2 metadata
 │   ├── process.py           # Service/process health and restart detection
 │   ├── logs.py              # Log file pattern scanning
-│   └── ports.py             # TCP port/listener checks
+│   ├── ports.py             # TCP port/listener checks
+│   └── docker.py            # Docker containers, images, disk usage
 ├── reporters/
 │   ├── __init__.py
 │   ├── dashboard.py         # Terminal output and formatting

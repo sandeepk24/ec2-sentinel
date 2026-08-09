@@ -8,6 +8,7 @@ Works over SSH, works in screen/tmux, works on a bad day at 3 AM.
 import sys
 from typing import Optional
 
+from collectors.docker import DockerReport
 from collectors.system import SystemReport
 from collectors.process import ProcessReport
 from collectors.logs import LogReport
@@ -192,6 +193,49 @@ def render_processes(proc_report: ProcessReport) -> str:
     return "\n".join(lines)
 
 
+def render_docker(docker_report: DockerReport) -> str:
+    if not docker_report.available:
+        if docker_report.error == "disabled in config":
+            return ""
+        return f"\n  {C.BOLD}DOCKER{C.RESET}\n  └─ {C.DIM}Not available ({docker_report.error}){C.RESET}"
+
+    lines = [
+        f"\n  {C.BOLD}DOCKER{C.RESET} (v{docker_report.server_version})",
+        f"  ├─ Containers {'.' * 8} {docker_report.running_count} running, "
+        f"{docker_report.stopped_count} stopped",
+        f"  ├─ Images {'.' * 13} {len(docker_report.images)}",
+        f"  ├─ Disk {'.' * 15} images {docker_report.disk.images_size} "
+        f"({docker_report.disk.images_reclaimable} reclaimable)",
+    ]
+
+    for i, c in enumerate(docker_report.containers[:8]):
+        prefix = "└─" if i == min(len(docker_report.containers), 8) - 1 else "├─"
+        if c.is_running:
+            icon = _status_icon(True, c.is_unhealthy or c.state == "restarting")
+            state = c.state.upper()
+            if c.is_unhealthy:
+                state = f"{C.RED}UNHEALTHY{C.RESET}"
+            elif c.state == "restarting":
+                state = f"{C.YELLOW}RESTARTING{C.RESET}"
+            else:
+                state = f"{C.GREEN}{state}{C.RESET}"
+        else:
+            icon = _status_icon(False)
+            state = f"{C.RED}{c.state.upper()}{C.RESET}"
+
+        name = c.name[:24]
+        image = c.image[:30]
+        lines.append(
+            f"  {prefix} {name} {'.' * max(1, 18 - len(name))} "
+            f"{icon} {state}  {C.DIM}{image}{C.RESET}"
+        )
+
+    if len(docker_report.containers) > 8:
+        lines.append(f"  {C.DIM}  … and {len(docker_report.containers) - 8} more{C.RESET}")
+
+    return "\n".join(lines)
+
+
 def render_ports(port_report: PortReport) -> str:
     lines = [f"\n  {C.BOLD}PORTS{C.RESET}"]
 
@@ -242,6 +286,7 @@ def render_verdict(
     proc_report: ProcessReport,
     port_report: PortReport,
     log_report: LogReport,
+    docker_report: DockerReport,
     thresholds: dict,
 ) -> str:
     """Summarize: how many warnings, how many criticals, what needs action."""
@@ -284,6 +329,18 @@ def render_verdict(
     if log_report.total_hits > 0:
         warnings.append(f"{log_report.total_hits} log pattern matches")
 
+    if docker_report.available:
+        for exp in docker_report.missing_expected:
+            if not exp.found:
+                criticals.append(f"Docker container missing: {exp.name}")
+            elif not exp.running:
+                criticals.append(f"Docker container stopped: {exp.name}")
+        for c in docker_report.unhealthy:
+            criticals.append(f"Docker unhealthy: {c.name}")
+        for c in docker_report.containers:
+            if c.state == "restarting":
+                warnings.append(f"Docker restarting: {c.name}")
+
     lines = [f"\n  {'─' * 45}"]
 
     if not warnings and not criticals:
@@ -312,6 +369,7 @@ def build_verdict_dict(
     proc_report: ProcessReport,
     port_report: PortReport,
     log_report: LogReport,
+    docker_report: DockerReport,
     thresholds: dict,
 ) -> dict:
     """Structured verdict for JSON / web dashboard."""
@@ -348,6 +406,18 @@ def build_verdict_dict(
     if log_report.total_hits > 0:
         warnings.append(f"{log_report.total_hits} log pattern matches")
 
+    if docker_report.available:
+        for exp in docker_report.missing_expected:
+            if not exp.found:
+                criticals.append(f"Docker container missing: {exp.name}")
+            elif not exp.running:
+                criticals.append(f"Docker container stopped: {exp.name}")
+        for c in docker_report.unhealthy:
+            criticals.append(f"Docker unhealthy: {c.name}")
+        for c in docker_report.containers:
+            if c.state == "restarting":
+                warnings.append(f"Docker restarting: {c.name}")
+
     if criticals:
         status = "critical"
     elif warnings:
@@ -367,6 +437,7 @@ def render_full_report(
     proc_report: ProcessReport,
     port_report: PortReport,
     log_report: LogReport,
+    docker_report: DockerReport,
     thresholds: dict,
 ) -> str:
     """Render the complete terminal dashboard."""
@@ -375,8 +446,11 @@ def render_full_report(
         render_system(system, thresholds),
         render_disks(system, thresholds),
         render_processes(proc_report),
+        render_docker(docker_report),
         render_ports(port_report),
         render_logs(log_report),
-        render_verdict(system, proc_report, port_report, log_report, thresholds),
+        render_verdict(
+            system, proc_report, port_report, log_report, docker_report, thresholds
+        ),
     ]
     return "\n".join(sections)

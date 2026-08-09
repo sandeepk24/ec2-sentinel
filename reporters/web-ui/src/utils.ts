@@ -82,7 +82,18 @@ export const verdictStyles: Record<
 };
 
 export function statusColor(status: string): string {
-  if (status === "NOT_FOUND" || status === "CLOSED") return "text-rose-300";
-  if (status === "RESTARTED" || status === "SLOW") return "text-amber-300";
-  return "text-emerald-300";
+  if (status === "NOT_FOUND" || status === "CLOSED" || status === "exited" || status === "dead")
+    return "text-rose-300";
+  if (status === "RESTARTED" || status === "SLOW" || status === "restarting")
+    return "text-amber-300";
+  if (status === "running" || status === "RUNNING" || status === "OPEN")
+    return "text-emerald-300";
+  return "text-slate-400";
+}
+
+export function dockerStateColor(state: string, health?: string | null): string {
+  if (health === "unhealthy" || state === "dead") return "text-rose-300";
+  if (state === "restarting" || state === "paused") return "text-amber-300";
+  if (state === "running") return "text-emerald-300";
+  return "text-slate-400";
 }
