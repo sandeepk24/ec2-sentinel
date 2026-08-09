@@ -133,13 +133,13 @@ EC2 Sentinel stays lightweight by design: one agent per box, zero AWS permission
 ### One-Line Install (recommended)
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/YOUR_USER/ec2-sentinel/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/sandeepk24/ec2-sentinel/main/install.sh | bash
 ```
 
 ### Manual Install
 
 ```bash
-git clone https://github.com/YOUR_USER/ec2-sentinel.git
+git clone https://github.com/sandeepk24/ec2-sentinel.git
 cd ec2-sentinel
 pip install -r requirements.txt
 cp config.example.yaml config.yaml   # edit this
@@ -340,7 +340,7 @@ contains zero-dependency bash scripts for the moments when you need answers NOW.
 
 ```bash
 # SSH into a troubled server, run this immediately
-curl -sSL https://raw.githubusercontent.com/YOUR_USER/ec2-sentinel/main/scripts/quick-check.sh | bash
+curl -sSL https://raw.githubusercontent.com/sandeepk24/ec2-sentinel/main/scripts/quick-check.sh | bash
 ```
 
 This gives you CPU, memory, disk, top processes, and listening ports in under 2 seconds, with zero dependencies beyond bash and standard Linux tools.

@@ -7,7 +7,7 @@
 #
 # Usage:
 #   ./quick-check.sh
-#   curl -sSL https://raw.githubusercontent.com/YOUR_USER/ec2-sentinel/main/scripts/quick-check.sh | bash
+#   curl -sSL https://raw.githubusercontent.com/sandeepk24/ec2-sentinel/main/scripts/quick-check.sh | bash
 # ============================================================================
 
 set -uo pipefail
@@ -172,6 +172,6 @@ fi
 
 echo -e "\n${B}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 echo -e "  Quick check complete. For full monitoring:"
-echo -e "  ${C}https://github.com/YOUR_USER/ec2-sentinel${N}"
+echo -e "  ${C}https://github.com/sandeepk24/ec2-sentinel${N}"
 echo -e "${B}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 echo ""

@@ -1,6 +1,6 @@
 [Unit]
 Description=EC2 Sentinel — Instance Health Monitor
-Documentation=https://github.com/YOUR_USER/ec2-sentinel
+Documentation=https://github.com/sandeepk24/ec2-sentinel
 After=network.target
 Wants=network.target
 

@@ -3,7 +3,7 @@
 # EC2 Sentinel — Installer
 # ============================================================================
 # Usage:
-#   curl -sSL https://raw.githubusercontent.com/YOUR_USER/ec2-sentinel/main/install.sh | bash
+#   curl -sSL https://raw.githubusercontent.com/sandeepk24/ec2-sentinel/main/install.sh | bash
 #   ./install.sh                   # install to /opt/ec2-sentinel
 #   ./install.sh --systemd         # install + enable systemd service
 #   ./install.sh --uninstall       # remove everything
@@ -12,7 +12,7 @@
 set -euo pipefail
 
 INSTALL_DIR="/opt/ec2-sentinel"
-REPO_URL="https://github.com/YOUR_USER/ec2-sentinel.git"
+REPO_URL="https://github.com/sandeepk24/ec2-sentinel.git"
 SERVICE_NAME="ec2-sentinel"
 PYTHON_MIN="3.9"
 
