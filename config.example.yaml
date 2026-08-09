@@ -8,6 +8,9 @@ sentinel:
   interval_seconds: 60           # scan frequency (seconds)
   hostname_override: ""          # friendly name (blank = auto-detect)
   log_file: "/var/log/ec2-sentinel.log"  # daemon mode log location
+  web_port: 8765                 # local dashboard port (--web)
+  web_host: "127.0.0.1"          # bind address (--web; use 0.0.0.0 to expose on LAN)
+  reports_dir: ""                # optional: fleet JSON reports directory (--web)
 
 # ---------------------------------------------------------------------------
 # Thresholds — when to warn vs panic

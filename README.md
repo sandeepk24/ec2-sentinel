@@ -115,7 +115,7 @@ Common install paths:
 |-------------|---------|
 | SSH into remote servers | ❌ No SSH client — runs locally only |
 | Discover EC2 instances via AWS API | ❌ No boto3 or IAM permissions needed |
-| Central web dashboard for all hosts | ❌ Terminal dashboard is per-instance; aggregate alerts in Slack/PagerDuty instead |
+| Central web dashboard for all hosts | ❌ No remote polling — use `--web` on one box + `--reports-dir` for fleet JSON |
 | Replace CloudWatch entirely | ❌ Complements CloudWatch with on-box checks CloudWatch misses |
 
 The README mentions SSH because **you** SSH in to install or troubleshoot — Sentinel
@@ -124,9 +124,24 @@ to another host (e.g. a database on `10.0.1.100`), which is not SSH.
 
 ### Want a central dashboard?
 
-That would be a separate tool or layer — for example, pipe `--once --json` output from
-each instance into CloudWatch, Datadog, or a log aggregator, and build a fleet view there.
-EC2 Sentinel stays lightweight by design: one agent per box, zero AWS permissions.
+Run the **local web dashboard** on one machine:
+
+```bash
+# Live view of this instance (opens http://127.0.0.1:8765 in your browser)
+python sentinel.py --web
+
+# Aggregate JSON reports from your fleet (one JSON file per instance)
+python sentinel.py --web --reports-dir /var/log/ec2-sentinel/fleet/
+```
+
+On each monitored instance, drop periodic JSON via cron:
+
+```bash
+*/5 * * * * /opt/ec2-sentinel/sentinel.py --once --json > /var/log/ec2-sentinel/fleet/$(hostname).json
+```
+
+Copy or sync those files to the dashboard host's `--reports-dir` to see every box in one browser tab.
+For a hosted fleet view, you can also pipe `--once --json` into CloudWatch, Datadog, or a log aggregator.
 
 ## Quick Start
 
@@ -156,6 +171,9 @@ python sentinel.py --watch
 
 # Daemon mode — background monitoring with alerting
 python sentinel.py --daemon
+
+# Web dashboard — view everything in your browser at http://127.0.0.1:8765
+python sentinel.py --web
 ```
 
 ### What You'll See
@@ -319,7 +337,10 @@ ec2-sentinel/
 │   └── ports.py             # TCP port/listener checks
 ├── reporters/
 │   ├── __init__.py
-│   └── dashboard.py         # Terminal output and formatting
+│   ├── dashboard.py         # Terminal output and formatting
+│   ├── web_server.py        # Local HTTP server for --web mode
+│   └── web/
+│       └── dashboard.html   # Browser dashboard (localhost)
 ├── scripts/
 │   ├── quick-check.sh       # Zero-dependency bash health check
 │   └── disk-cleanup.sh      # Safe disk cleanup for build servers

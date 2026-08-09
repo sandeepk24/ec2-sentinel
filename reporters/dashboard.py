@@ -307,6 +307,57 @@ def render_verdict(
     return "\n".join(lines)
 
 
+def build_verdict_dict(
+    system: SystemReport,
+    proc_report: ProcessReport,
+    port_report: PortReport,
+    log_report: LogReport,
+    thresholds: dict,
+) -> dict:
+    """Structured verdict for JSON / web dashboard."""
+    warnings = []
+    criticals = []
+
+    if system.cpu.usage_percent >= thresholds.get("cpu_crit", 95):
+        criticals.append(f"CPU at {system.cpu.usage_percent}%")
+    elif system.cpu.usage_percent >= thresholds.get("cpu_warn", 80):
+        warnings.append(f"CPU at {system.cpu.usage_percent}%")
+
+    if system.cpu.steal_percent > 5:
+        warnings.append(f"CPU steal time {system.cpu.steal_percent}%")
+
+    if system.memory.used_percent >= thresholds.get("memory_crit", 95):
+        criticals.append(f"Memory at {system.memory.used_percent}%")
+    elif system.memory.used_percent >= thresholds.get("memory_warn", 80):
+        warnings.append(f"Memory at {system.memory.used_percent}%")
+
+    for d in system.disks:
+        if d.used_percent >= thresholds.get("disk_crit", 90):
+            criticals.append(f"{d.mount} disk at {d.used_percent}%")
+        elif d.used_percent >= thresholds.get("disk_warn", 75):
+            warnings.append(f"{d.mount} disk at {d.used_percent}%")
+
+    for p in proc_report.missing:
+        criticals.append(f"{p.name} process missing")
+    for p in proc_report.restarted:
+        warnings.append(f"{p.name} restarted (was pid {p.previous_pid})")
+
+    for c in port_report.failed:
+        criticals.append(f"Port {c.port} ({c.service_name}) closed")
+
+    if log_report.total_hits > 0:
+        warnings.append(f"{log_report.total_hits} log pattern matches")
+
+    if criticals:
+        status = "critical"
+    elif warnings:
+        status = "warning"
+    else:
+        status = "ok"
+
+    return {"status": status, "warnings": warnings, "criticals": criticals}
+
+
 # ---------------------------------------------------------------------------
 # Full report
 # ---------------------------------------------------------------------------

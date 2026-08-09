@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EC2 Sentinel — Health Dashboard</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --surface: #1a2332;
+      --border: #2d3a4f;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --green: #3fb950;
+      --yellow: #d29922;
+      --red: #f85149;
+      --cyan: #39c5cf;
+      --blue: #58a6ff;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 1.25rem 2rem;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+    header h1 { font-size: 1.35rem; font-weight: 700; color: var(--cyan); }
+    header h1 span { color: var(--text); font-weight: 400; }
+    .meta { color: var(--muted); font-size: 0.875rem; }
+    .badge {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .badge.ok { background: rgba(63,185,80,0.15); color: var(--green); }
+    .badge.warn { background: rgba(210,153,34,0.15); color: var(--yellow); }
+    .badge.crit { background: rgba(248,81,73,0.15); color: var(--red); }
+    main { padding: 1.5rem 2rem 3rem; max-width: 1400px; margin: 0 auto; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem;
+    }
+    .card h2 {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 0.75rem;
+    }
+    .metric { font-size: 2rem; font-weight: 700; margin-bottom: 0.25rem; }
+    .bar {
+      height: 8px;
+      background: var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      margin: 0.5rem 0;
+    }
+    .bar-fill { height: 100%; border-radius: 4px; transition: width 0.4s ease; }
+    .bar-fill.ok { background: var(--green); }
+    .bar-fill.warn { background: var(--yellow); }
+    .bar-fill.crit { background: var(--red); }
+    .sub { color: var(--muted); font-size: 0.85rem; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
+    .status-ok { color: var(--green); }
+    .status-warn { color: var(--yellow); }
+    .status-crit { color: var(--red); }
+    .host-block { margin-bottom: 2.5rem; }
+    .host-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .host-header h2 { font-size: 1.1rem; color: var(--blue); }
+    .alert-list { list-style: none; }
+    .alert-list li {
+      padding: 0.6rem 0.75rem;
+      border-left: 3px solid var(--border);
+      margin-bottom: 0.5rem;
+      background: rgba(255,255,255,0.02);
+      border-radius: 0 6px 6px 0;
+      font-size: 0.9rem;
+    }
+    .alert-list li.critical { border-left-color: var(--red); }
+    .alert-list li.warning { border-left-color: var(--yellow); }
+    .alert-list li strong { display: block; margin-bottom: 0.15rem; }
+    .loading, .error {
+      text-align: center;
+      padding: 4rem 2rem;
+      color: var(--muted);
+    }
+    .error { color: var(--red); }
+    footer {
+      text-align: center;
+      padding: 1rem;
+      color: var(--muted);
+      font-size: 0.8rem;
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>EC2 Sentinel <span>— Health Dashboard</span></h1>
+      <p class="meta" id="header-meta">Loading…</p>
+    </div>
+    <div id="header-badge"></div>
+  </header>
+
+  <main id="app">
+    <div class="loading">Collecting health data…</div>
+  </main>
+
+  <footer>Auto-refreshes every <span id="refresh-interval">30</span>s · Local only · <code>/api/health</code></footer>
+
+  <script>
+    function barClass(pct, warn, crit) {
+      if (pct >= crit) return "crit";
+      if (pct >= warn) return "warn";
+      return "ok";
+    }
+
+    function statusClass(status) {
+      if (status === "NOT_FOUND" || status === "CLOSED") return "status-crit";
+      if (status === "RESTARTED" || status === "SLOW") return "status-warn";
+      return "status-ok";
+    }
+
+    function fmtBytes(b) {
+      if (!b) return "—";
+      const gb = b / (1024 ** 3);
+      if (gb >= 1) return gb.toFixed(1) + " GB";
+      return Math.round(b / (1024 ** 2)) + " MB";
+    }
+
+    function fmtUptime(sec) {
+      if (!sec) return "—";
+      const d = Math.floor(sec / 86400);
+      const h = Math.floor((sec % 86400) / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      return `${d}d ${h}h ${m}m`;
+    }
+
+    function renderHost(hostData, thresholds, isLive) {
+      const r = hostData.report;
+      const v = hostData.verdict || { status: "ok", warnings: [], criticals: [] };
+      const h = r.host || {};
+      const badgeClass = v.status === "critical" ? "crit" : v.status === "warning" ? "warn" : "ok";
+      const badgeLabel = v.status === "ok" ? "All clear" : v.status;
+
+      let html = `<div class="host-block">`;
+      html += `<div class="host-header">`;
+      html += `<h2>${h.hostname || "unknown"}</h2>`;
+      html += `<span class="badge ${badgeClass}">${badgeLabel}</span>`;
+      if (isLive) html += `<span class="meta">● live</span>`;
+      else html += `<span class="meta">${hostData.filename || "imported"}</span>`;
+      html += `<span class="meta">${h.instance_id || ""} · ${h.instance_type || ""} · ${h.region || ""}</span>`;
+      html += `</div>`;
+
+      html += `<div class="grid">`;
+      const cpu = r.cpu || {};
+      const mem = r.memory || {};
+      const t = thresholds || {};
+
+      html += metricCard("CPU", cpu.usage_percent, t.cpu_warn || 80, t.cpu_crit || 95,
+        `Load ${(cpu.load_avg || []).slice(0,1).join("")} · ${cpu.cores || "?"} cores · steal ${cpu.steal_percent || 0}%`);
+      html += metricCard("Memory", mem.used_percent, t.memory_warn || 80, t.memory_crit || 95,
+        `${fmtBytes(mem.used_bytes)} / ${fmtBytes(mem.total_bytes)} · OOM kills: ${mem.oom_kills || 0}`);
+      html += `<div class="card"><h2>Uptime</h2><div class="metric">${fmtUptime(h.uptime_seconds)}</div><div class="sub">Last scan: ${r.timestamp || "—"}</div></div>`;
+      html += `</div>`;
+
+      if (r.disks && r.disks.length) {
+        html += `<div class="card" style="margin-bottom:1rem"><h2>Disk</h2><table><thead><tr><th>Mount</th><th>Used</th><th>Bar</th><th>Free</th></tr></thead><tbody>`;
+        for (const d of r.disks) {
+          const cls = barClass(d.used_percent, t.disk_warn || 75, t.disk_crit || 90);
+          html += `<tr><td>${d.mount}</td><td>${d.used_percent}%</td>`;
+          html += `<td><div class="bar"><div class="bar-fill ${cls}" style="width:${d.used_percent}%"></div></div></td>`;
+          html += `<td>${fmtBytes(d.total_bytes - d.used_bytes)}`;
+          if (d.days_until_full != null) html += ` · full in ~${Math.round(d.days_until_full)}d`;
+          html += `</td></tr>`;
+        }
+        html += `</tbody></table></div>`;
+      }
+
+      html += `<div class="grid">`;
+      html += renderTableCard("Processes", ["Name", "Status", "PID", "CPU", "Mem"],
+        (r.processes || []).map(p => [p.name, p.status, p.pid || "—", (p.cpu_percent ?? "—") + (p.cpu_percent != null ? "%" : ""), p.memory_mb ? p.memory_mb + " MB" : "—"]));
+      html += renderTableCard("Ports", ["Port", "Service", "Status", "Latency"],
+        (r.ports || []).map(p => [p.port, p.service, p.status, p.response_ms != null ? p.response_ms + " ms" : "—"]));
+      html += `</div>`;
+
+      if (r.log_matches && r.log_matches.length) {
+        html += `<div class="card" style="margin-top:1rem"><h2>Log patterns</h2><table><thead><tr><th>Pattern</th><th>Hits</th><th>File</th></tr></thead><tbody>`;
+        for (const m of r.log_matches) {
+          html += `<tr><td>${m.pattern}</td><td class="status-warn">${m.count}</td><td class="sub">${m.file}</td></tr>`;
+        }
+        html += `</tbody></table></div>`;
+      }
+
+      if (hostData.alerts && hostData.alerts.length) {
+        html += `<div class="card" style="margin-top:1rem"><h2>Active alerts</h2><ul class="alert-list">`;
+        for (const a of hostData.alerts) {
+          html += `<li class="${a.severity}"><strong>${a.title}</strong>${a.message.replace(/\n/g, "<br>")}</li>`;
+        }
+        html += `</ul></div>`;
+      }
+
+      html += `</div>`;
+      return html;
+    }
+
+    function metricCard(label, pct, warn, crit, sub) {
+      pct = pct || 0;
+      const cls = barClass(pct, warn, crit);
+      return `<div class="card"><h2>${label}</h2><div class="metric">${pct}%</div>` +
+        `<div class="bar"><div class="bar-fill ${cls}" style="width:${Math.min(pct,100)}%"></div></div>` +
+        `<div class="sub">${sub || ""}</div></div>`;
+    }
+
+    function renderTableCard(title, headers, rows) {
+      let html = `<div class="card"><h2>${title}</h2><table><thead><tr>`;
+      for (const h of headers) html += `<th>${h}</th>`;
+      html += `</tr></thead><tbody>`;
+      if (!rows.length) html += `<tr><td colspan="${headers.length}" class="sub">None configured</td></tr>`;
+      for (const row of rows) {
+        html += `<tr>`;
+        for (let i = 0; i < row.length; i++) {
+          const cls = i === 1 ? statusClass(row[i]) : "";
+          html += `<td class="${cls}">${row[i]}</td>`;
+        }
+        html += `</tr>`;
+      }
+      html += `</tbody></table></div>`;
+      return html;
+    }
+
+    function render(data) {
+      const app = document.getElementById("app");
+      const thresholds = data.thresholds || {};
+      let html = "";
+
+      if (data.live) {
+        html += renderHost(data.live, thresholds, true);
+      }
+
+      if (data.fleet && data.fleet.length) {
+        html += `<h2 style="margin:2rem 0 1rem;color:var(--muted);font-size:0.85rem;text-transform:uppercase;letter-spacing:0.08em">Fleet reports (${data.fleet.length})</h2>`;
+        for (const host of data.fleet) {
+          html += renderHost(host, thresholds, false);
+        }
+      }
+
+      app.innerHTML = html || `<div class="error">No health data available.</div>`;
+
+      const live = data.live;
+      if (live && live.report) {
+        const h = live.report.host || {};
+        document.getElementById("header-meta").textContent =
+          `${h.hostname || "localhost"} · ${h.instance_id || "local"} · scanned ${live.report.timestamp || "—"}`;
+        const v = live.verdict || { status: "ok" };
+        const cls = v.status === "critical" ? "crit" : v.status === "warning" ? "warn" : "ok";
+        document.getElementById("header-badge").innerHTML =
+          `<span class="badge ${cls}">${v.status === "ok" ? "All clear" : v.status}</span>`;
+      }
+
+      if (data.refresh_seconds) {
+        document.getElementById("refresh-interval").textContent = data.refresh_seconds;
+      }
+    }
+
+    async function refresh() {
+      try {
+        const resp = await fetch("/api/health");
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        if (data.refresh_seconds) {
+          document.getElementById("refresh-interval").textContent = data.refresh_seconds;
+        }
+        render(data);
+      } catch (err) {
+        document.getElementById("app").innerHTML =
+          `<div class="error">Failed to load health data: ${err.message}<br><br>` +
+          `Is <code>python sentinel.py --web</code> running?</div>`;
+      }
+    }
+
+    refresh();
+    setInterval(refresh, 30000);
+  </script>
+</body>
+</html>

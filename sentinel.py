@@ -7,6 +7,7 @@ Usage:
     python sentinel.py --watch           # continuous terminal dashboard
     python sentinel.py --daemon          # background mode with alerting
     python sentinel.py --once --json     # JSON output for piping
+    python sentinel.py --web             # local web dashboard (localhost:8765)
 
 See README.md for full documentation.
 """
@@ -29,7 +30,8 @@ from collectors.system import collect_system
 from collectors.process import collect_processes
 from collectors.logs import collect_logs
 from collectors.ports import collect_ports
-from reporters.dashboard import render_full_report
+from reporters.dashboard import build_verdict_dict, render_full_report
+from reporters.web_server import load_fleet_reports, run_web_server
 
 # ---------------------------------------------------------------------------
 # Defaults
@@ -291,24 +293,93 @@ def report_to_dict(system, proc_report, port_report, log_report) -> dict:
     }
 
 
+def alert_to_dict(alert: Alert) -> dict:
+    return {
+        "severity": alert.severity,
+        "title": alert.title,
+        "message": alert.message,
+        "hostname": alert.hostname,
+        "timestamp": alert.timestamp,
+        "source": alert.source,
+    }
+
+
+def run_scan(config: dict) -> dict:
+    """Collect health data and return reports + alerts."""
+    thresholds = get_thresholds(config)
+    process_cfgs = get_process_configs(config)
+    port_cfgs = get_port_configs(config)
+    log_patterns, log_files = get_log_config(config)
+
+    system = collect_system()
+    proc_report = collect_processes(process_cfgs)
+    port_report = collect_ports(port_cfgs)
+    log_report = collect_logs(log_patterns, log_files)
+    hostname = config.get("sentinel", {}).get("hostname_override", system.ec2.hostname)
+    alerts = generate_alerts(
+        system, proc_report, port_report, log_report, thresholds, hostname
+    )
+
+    return {
+        "system": system,
+        "proc_report": proc_report,
+        "port_report": port_report,
+        "log_report": log_report,
+        "thresholds": thresholds,
+        "hostname": hostname,
+        "alerts": alerts,
+    }
+
+
+def build_health_payload(config: dict, reports_dir: Path | None = None) -> dict:
+    """Build JSON payload for the web dashboard API."""
+    scan = run_scan(config)
+    system = scan["system"]
+    proc_report = scan["proc_report"]
+    port_report = scan["port_report"]
+    log_report = scan["log_report"]
+    thresholds = scan["thresholds"]
+    alerts = scan["alerts"]
+
+    live = {
+        "source": "live",
+        "report": report_to_dict(system, proc_report, port_report, log_report),
+        "alerts": [alert_to_dict(a) for a in alerts],
+        "verdict": build_verdict_dict(
+            system, proc_report, port_report, log_report, thresholds
+        ),
+    }
+
+    fleet_dir = reports_dir
+    if fleet_dir is None:
+        cfg_dir = config.get("sentinel", {}).get("reports_dir")
+        if cfg_dir:
+            fleet_dir = Path(cfg_dir)
+
+    fleet = load_fleet_reports(fleet_dir)
+    interval = config.get("sentinel", {}).get("interval_seconds", 30)
+
+    return {
+        "live": live,
+        "fleet": fleet,
+        "thresholds": thresholds,
+        "refresh_seconds": interval,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Run modes
 # ---------------------------------------------------------------------------
 
 def run_once(config: dict, output_json: bool = False) -> int:
     """Single health check. Returns exit code (0=ok, 1=warnings, 2=critical)."""
-    thresholds = get_thresholds(config)
-    process_cfgs = get_process_configs(config)
-    port_cfgs = get_port_configs(config)
-    log_patterns, log_files = get_log_config(config)
-
-    # Collect
-    system = collect_system()
-    proc_report = collect_processes(process_cfgs)
-    port_report = collect_ports(port_cfgs)
-    log_report = collect_logs(log_patterns, log_files)
-
-    hostname = config.get("sentinel", {}).get("hostname_override", system.ec2.hostname)
+    scan = run_scan(config)
+    system = scan["system"]
+    proc_report = scan["proc_report"]
+    port_report = scan["port_report"]
+    log_report = scan["log_report"]
+    thresholds = scan["thresholds"]
+    alerts = scan["alerts"]
 
     if output_json:
         data = report_to_dict(system, proc_report, port_report, log_report)
@@ -316,8 +387,7 @@ def run_once(config: dict, output_json: bool = False) -> int:
     else:
         print(render_full_report(system, proc_report, port_report, log_report, thresholds))
 
-    # Generate and dispatch alerts
-    alerts = generate_alerts(system, proc_report, port_report, log_report, thresholds, hostname)
+    # Dispatch alerts
     alert_cfg = config.get("alerts", {})
     if alerts and any(v.get("enabled") for v in alert_cfg.values()):
         dispatch_alerts(alerts, alert_cfg)
@@ -332,6 +402,21 @@ def run_once(config: dict, output_json: bool = False) -> int:
     return 0
 
 
+def run_web(
+    config: dict,
+    host: str = "127.0.0.1",
+    port: int = 8765,
+    open_browser: bool = True,
+    reports_dir: Path | None = None,
+) -> None:
+    """Serve local HTML dashboard with live health data."""
+    def get_health() -> dict:
+        return build_health_payload(config, reports_dir)
+
+    run_web_server(get_health, host=host, port=port, open_browser=open_browser)
+
+
+# ---------------------------------------------------------------------------
 def run_watch(config: dict) -> None:
     """Continuous terminal dashboard — clears and re-renders each cycle."""
     interval = config.get("sentinel", {}).get("interval_seconds", 30)
@@ -451,6 +536,7 @@ Examples:
   python sentinel.py --watch                # live terminal dashboard
   python sentinel.py --daemon               # background monitoring
   python sentinel.py --once --json          # JSON for piping/logging
+  python sentinel.py --web                  # browser dashboard at localhost:8765
   python sentinel.py --config /etc/myconfig.yaml --once
         """,
     )
@@ -459,9 +545,17 @@ Examples:
     mode.add_argument("--once", action="store_true", help="Run once and exit")
     mode.add_argument("--watch", action="store_true", help="Continuous terminal dashboard")
     mode.add_argument("--daemon", action="store_true", help="Background daemon with alerting")
+    mode.add_argument("--web", action="store_true", help="Local web dashboard (opens browser)")
 
     parser.add_argument("--config", "-c", help="Path to config YAML file")
     parser.add_argument("--json", action="store_true", help="Output as JSON (with --once)")
+    parser.add_argument("--host", default="127.0.0.1", help="Web dashboard bind address (with --web)")
+    parser.add_argument("--port", type=int, default=8765, help="Web dashboard port (with --web)")
+    parser.add_argument("--no-browser", action="store_true", help="Do not open browser (with --web)")
+    parser.add_argument(
+        "--reports-dir",
+        help="Directory of JSON reports from other instances (with --web)",
+    )
 
     args = parser.parse_args()
     config = load_config(args.config)
@@ -473,6 +567,24 @@ Examples:
         run_watch(config)
     elif args.daemon:
         run_daemon(config)
+    elif args.web:
+        sentinel_cfg = config.get("sentinel", {})
+        host = sentinel_cfg.get("web_host", args.host)
+        port = sentinel_cfg.get("web_port", args.port)
+        if "--host" in sys.argv:
+            host = args.host
+        if "--port" in sys.argv:
+            port = args.port
+        reports_dir = Path(args.reports_dir) if args.reports_dir else None
+        if reports_dir is None and sentinel_cfg.get("reports_dir"):
+            reports_dir = Path(sentinel_cfg["reports_dir"])
+        run_web(
+            config,
+            host=host,
+            port=port,
+            open_browser=not args.no_browser,
+            reports_dir=reports_dir,
+        )
 
 
 if __name__ == "__main__":
