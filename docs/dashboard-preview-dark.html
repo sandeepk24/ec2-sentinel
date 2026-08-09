@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EC2 Sentinel — Dark Dashboard Preview</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+        background: #070b14;
+        color: #e2e8f0;
+        min-height: 100vh;
+        -webkit-font-smoothing: antialiased;
+      }
+      .backdrop {
+        position: fixed; inset: 0; pointer-events: none;
+        background: #070b14;
+      }
+      .backdrop::before {
+        content: ""; position: absolute; inset: 0;
+        background: radial-gradient(ellipse at top, rgba(99,102,241,.28) 0%, transparent 50%);
+      }
+      .backdrop::after {
+        content: ""; position: absolute; inset: 0; opacity: .035;
+        background-image:
+          linear-gradient(rgba(255,255,255,.6) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255,255,255,.6) 1px, transparent 1px);
+        background-size: 48px 48px;
+      }
+      .wrap { position: relative; z-index: 1; max-width: 1120px; margin: 0 auto; padding: 32px 24px; }
+      .header {
+        display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px;
+        margin-bottom: 28px; padding: 20px; border-radius: 24px;
+        border: 1px solid rgba(255,255,255,.1); background: rgba(10,16,32,.8);
+        backdrop-filter: blur(12px);
+      }
+      .brand { display: flex; gap: 16px; align-items: flex-start; }
+      .logo {
+        width: 48px; height: 48px; border-radius: 16px; display: grid; place-items: center;
+        background: linear-gradient(135deg, #8b5cf6, #d946ef);
+        box-shadow: 0 8px 24px rgba(139,92,246,.35);
+        font-size: 22px;
+      }
+      .eyebrow {
+        font-size: 11px; font-weight: 700; letter-spacing: .28em; text-transform: uppercase;
+        color: rgba(196,181,253,.5); margin-bottom: 4px;
+      }
+      h1 {
+        font-size: 2rem; font-weight: 800; letter-spacing: -.02em;
+        background: linear-gradient(90deg, #67e8f9, #c4b5fd, #f0abfc);
+        -webkit-background-clip: text; background-clip: text; color: transparent;
+      }
+      .subtitle { margin-top: 4px; color: #94a3b8; font-size: 14px; font-weight: 500; }
+      .hostline {
+        margin-top: 12px; padding: 8px 12px; border-radius: 16px; font-size: 13px; color: #94a3b8;
+        border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.04);
+      }
+      .hostline b { color: #67e8f9; font-family: "JetBrains Mono", monospace; font-weight: 600; }
+      .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+      .pill, .btn {
+        border-radius: 999px; padding: 8px 14px; font-size: 12px; font-weight: 700;
+        border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.05); color: #cbd5e1;
+      }
+      .pill.warn { background: rgba(245,158,11,.2); color: #fde68a; border-color: rgba(251,191,36,.4); }
+      .pill.live { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+      .dot { width: 8px; height: 8px; border-radius: 50%; background: #34d399; box-shadow: 0 0 0 4px rgba(52,211,153,.15); }
+      .btn { font-size: 13px; cursor: default; }
+      .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+      .card {
+        border-radius: 16px; border: 1px solid rgba(255,255,255,.1);
+        background: rgba(10,16,32,.7); padding: 16px; backdrop-filter: blur(12px);
+      }
+      .card h3 { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+      .card .meta { font-size: 11px; color: #64748b; margin-bottom: 12px; }
+      .chart {
+        height: 140px; border-radius: 12px; border: 1px dashed rgba(255,255,255,.12);
+        background: linear-gradient(180deg, rgba(34,211,238,.08), transparent 70%);
+        position: relative; overflow: hidden;
+      }
+      .chart.mem { background: linear-gradient(180deg, rgba(168,85,247,.08), transparent 70%); }
+      .chart svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+      .hero {
+        border-radius: 24px; padding: 24px; margin-bottom: 24px;
+        border: 1px solid rgba(245,158,11,.4);
+        background: linear-gradient(135deg, rgba(120,53,15,.5), rgba(7,11,20,1) 70%);
+        box-shadow: 0 8px 40px rgba(245,158,11,.12);
+      }
+      .hero .tag {
+        display: inline-block; margin-bottom: 10px; padding: 4px 10px; border-radius: 999px;
+        font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+        background: rgba(245,158,11,.25); color: #fde68a; border: 1px solid rgba(251,191,36,.5);
+      }
+      .hero h2 { font-size: 1.75rem; font-weight: 800; margin-bottom: 10px; }
+      .hero p { color: #cbd5e1; line-height: 1.6; max-width: 760px; font-size: 17px; }
+      .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+      .metric {
+        border-radius: 16px; border: 1px solid rgba(255,255,255,.1);
+        background: linear-gradient(135deg, #0d1220, #070b14); padding: 18px; position: relative; overflow: hidden;
+      }
+      .metric::before {
+        content: ""; position: absolute; top: 0; left: 0; right: 0; height: 4px;
+        background: linear-gradient(90deg, #14b8a6, #6366f1, #a855f7);
+      }
+      .metric .label {
+        font-size: 11px; font-weight: 700; letter-spacing: .22em; text-transform: uppercase;
+        color: rgba(196,181,253,.6); margin-bottom: 12px;
+      }
+      .metric .value { font-family: "JetBrains Mono", monospace; font-size: 2rem; font-weight: 700; }
+      .metric .sub { margin-top: 8px; font-size: 13px; color: #94a3b8; line-height: 1.45; }
+      .ring {
+        width: 72px; height: 72px; border-radius: 50%; float: left; margin-right: 14px;
+        background: conic-gradient(#6366f1 0 68%, rgba(255,255,255,.08) 68% 100%);
+        display: grid; place-items: center; position: relative;
+      }
+      .ring::after {
+        content: "68%"; position: absolute; inset: 8px; border-radius: 50%;
+        background: #0a1020; display: grid; place-items: center;
+        font-family: "JetBrains Mono", monospace; font-size: 13px; font-weight: 700; color: #fde68a;
+      }
+      .footer {
+        margin-top: 28px; text-align: center; font-size: 12px; color: #64748b;
+        border-top: 1px solid rgba(255,255,255,.1); padding-top: 18px;
+      }
+      @media (max-width: 900px) {
+        .grid2, .metrics { grid-template-columns: 1fr; }
+        h1 { font-size: 1.5rem; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="backdrop"></div>
+    <div class="wrap">
+      <header class="header">
+        <div>
+          <div class="brand">
+            <div class="logo">🛡️</div>
+            <div>
+              <div class="eyebrow">Infrastructure health</div>
+              <h1>EC2 Sentinel</h1>
+              <div class="subtitle">Executive diagnostics · Where CPU &amp; memory go · Why it's slow</div>
+            </div>
+          </div>
+          <div class="hostline">
+            <b>ip-172-31-34-27.ec2.internal</b> · i-0a1b2c3d4e5f67890 · m5.xlarge · us-east-1 · scanned Aug 9, 2026, 2:32 PM
+          </div>
+        </div>
+        <div class="actions">
+          <span class="pill warn">WARNING</span>
+          <span class="pill live"><span class="dot"></span>Live · next in 24s / 30s</span>
+          <span class="btn">↻ Refresh</span>
+        </div>
+      </header>
+
+      <div class="grid2">
+        <div class="card">
+          <h3>CPU over time</h3>
+          <div class="meta">Live samples while this page is open</div>
+          <div class="chart">
+            <svg viewBox="0 0 400 140" preserveAspectRatio="none">
+              <polyline fill="none" stroke="#22d3ee" stroke-width="2"
+                points="0,110 40,95 80,88 120,70 160,75 200,55 240,60 280,45 320,50 360,35 400,40" />
+              <polyline fill="none" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="4 4"
+                points="0,120 80,118 160,115 240,112 320,110 400,108" />
+            </svg>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Memory over time</h3>
+          <div class="meta">Used % of RAM</div>
+          <div class="chart mem">
+            <svg viewBox="0 0 400 140" preserveAspectRatio="none">
+              <polyline fill="none" stroke="#e879f9" stroke-width="2"
+                points="0,100 50,92 100,85 150,78 200,72 250,68 300,62 350,58 400,52" />
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <section class="hero">
+        <div class="tag">Executive summary · degraded</div>
+        <h2>Degraded — explainable issues found</h2>
+        <p>
+          CPU is elevated (68%) with moderate iowait. Memory is at 74% with swap starting to move.
+          Top consumers are <strong>tomcat</strong> and <strong>jenkins</strong>. Disk on <strong>/var</strong>
+          is trending toward warning — say this on the call and point to the next steps below.
+        </p>
+      </section>
+
+      <div class="metrics">
+        <div class="metric">
+          <div class="label">CPU</div>
+          <div class="ring"></div>
+          <div class="value">68%</div>
+          <div class="sub">Load 2.14 · 4 cores · iowait 6.2% · steal 0%</div>
+        </div>
+        <div class="metric">
+          <div class="label">Memory</div>
+          <div class="value">74%</div>
+          <div class="sub">2.1 GB available · apps ~4.8 GB · swap 12%</div>
+        </div>
+        <div class="metric">
+          <div class="label">Uptime</div>
+          <div class="value">47d 3h</div>
+          <div class="sub">Scanned Aug 9, 2026, 2:32:01 PM</div>
+        </div>
+      </div>
+
+      <div class="footer">
+        EC2 Sentinel web dashboard · <code>python sentinel.py --web</code> · polls /api/health every 30s
+      </div>
+    </div>
+  </body>
+</html>

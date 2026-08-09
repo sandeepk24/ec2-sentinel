@@ -40,6 +40,29 @@ or the Spring Boot app that's been OOM-killed and restarted 14 times since midni
 └─────────────────────────────────────────────────────────┘
 ```
 
+## Web Dashboard — Dark Mode Preview
+
+<p align="center">
+  <a href="docs/dashboard-preview-dark.html">
+    <img src="docs/assets/dashboard-dark.png" alt="EC2 Sentinel dark mode web dashboard with live CPU and memory charts, executive diagnosis, and host health verdict" width="920"/>
+  </a>
+</p>
+
+<p align="center">
+  <strong>Live React dashboard</strong> — charts, executive diagnosis, top consumers, Docker status, and a plain-English “why is this slow?” summary.<br/>
+  <a href="docs/dashboard-preview-dark.html">Open interactive HTML preview →</a>
+</p>
+
+**Try it in under a minute:**
+
+```bash
+curl -sSL https://raw.githubusercontent.com/sandeepk24/ec2-sentinel/main/install.sh | bash
+cd ec2-sentinel && python sentinel.py --web
+# → http://127.0.0.1:8765
+```
+
+No AWS API keys. No central server. Install on the instance, open the browser, done.
+
 ## Who Is This For?
 
 If your daily routine looks anything like this, EC2 Sentinel was built for you:
