@@ -183,9 +183,7 @@ export default function App() {
         </AnimatePresence>
 
         <footer className="mt-16 border-t border-indigo-100/80 pt-6 text-center text-xs dash-subtle dark:border-white/10">
-          Dynamic SPA · React + TanStack Query + Recharts · polls{" "}
-          <code className="rounded bg-indigo-50 px-1.5 py-0.5 font-mono text-indigo-700 dark:bg-transparent dark:text-violet-300/70">/api/health</code> every{" "}
-          {intervalSeconds}s
+          Dynamic SPA · React + TanStack Query + Recharts
         </footer>
       </div>
     </div>

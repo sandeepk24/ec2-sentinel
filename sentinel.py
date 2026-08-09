@@ -67,9 +67,37 @@ DEFAULT_LOG_PATTERNS = [
     "Too many open files",
 ]
 
+DEFAULT_INTERVAL_SECONDS = 300
+CONFIG_VERSION = 2
+LEGACY_INTERVAL_SECONDS = {30, 60}
+
 # ---------------------------------------------------------------------------
 # Config loading
 # ---------------------------------------------------------------------------
+
+def normalize_config(cfg: dict | None) -> dict:
+    """Apply sentinel defaults and migrate legacy scan intervals."""
+    if not cfg:
+        cfg = {}
+    sentinel = cfg.setdefault("sentinel", {})
+    version = sentinel.get("config_version", 1)
+
+    if version < CONFIG_VERSION:
+        interval = sentinel.get("interval_seconds")
+        if interval is None or interval in LEGACY_INTERVAL_SECONDS:
+            sentinel["interval_seconds"] = DEFAULT_INTERVAL_SECONDS
+        sentinel["config_version"] = CONFIG_VERSION
+    elif "interval_seconds" not in sentinel:
+        sentinel["interval_seconds"] = DEFAULT_INTERVAL_SECONDS
+
+    return cfg
+
+
+def get_interval_seconds(config: dict) -> int:
+    return int(
+        config.get("sentinel", {}).get("interval_seconds", DEFAULT_INTERVAL_SECONDS)
+    )
+
 
 def load_config(config_path: str | None = None) -> dict:
     """Load YAML config, falling back to defaults."""
@@ -79,15 +107,15 @@ def load_config(config_path: str | None = None) -> dict:
             print(f"Config file not found: {config_path}", file=sys.stderr)
             sys.exit(1)
         with open(path) as f:
-            return yaml.safe_load(f) or {}
+            return normalize_config(yaml.safe_load(f) or {})
 
     for path in DEFAULT_CONFIG_PATHS:
         if path.exists():
             with open(path) as f:
-                return yaml.safe_load(f) or {}
+                return normalize_config(yaml.safe_load(f) or {})
 
     # No config file — run with sensible defaults
-    return {}
+    return normalize_config({})
 
 
 def get_thresholds(config: dict) -> dict:
@@ -557,7 +585,7 @@ def build_health_payload(config: dict, reports_dir: Path | None = None) -> dict:
             fleet_dir = Path(cfg_dir)
 
     fleet = load_fleet_reports(fleet_dir)
-    interval = config.get("sentinel", {}).get("interval_seconds", 300)
+    interval = get_interval_seconds(config)
 
     return {
         "live": live,
@@ -629,7 +657,7 @@ def run_web(
 # ---------------------------------------------------------------------------
 def run_watch(config: dict) -> None:
     """Continuous terminal dashboard — clears and re-renders each cycle."""
-    interval = config.get("sentinel", {}).get("interval_seconds", 300)
+    interval = get_interval_seconds(config)
 
     # Handle Ctrl+C gracefully
     running = True
@@ -695,7 +723,7 @@ def run_daemon(config: dict) -> None:
     logger = logging.getLogger("ec2-sentinel")
     logger.info("EC2 Sentinel daemon started")
 
-    interval = config.get("sentinel", {}).get("interval_seconds", 300)
+    interval = get_interval_seconds(config)
 
     running = True
 

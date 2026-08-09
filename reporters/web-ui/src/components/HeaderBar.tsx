@@ -1,21 +1,9 @@
 import { motion } from "framer-motion";
 import { Activity, RefreshCw, Shield } from "lucide-react";
 import { cn } from "../lib/cn";
-import { fmtTime, verdictStyles } from "../utils";
+import { fmtTime, fmtRefreshInterval, verdictStyles } from "../utils";
 import type { HostInfo, Verdict } from "../types";
 import { ThemeToggle } from "./ThemeToggle";
-
-function fmtRefreshInterval(seconds: number): string {
-  if (seconds >= 3600 && seconds % 3600 === 0) {
-    const h = seconds / 3600;
-    return `every ${h} hour${h === 1 ? "" : "s"}`;
-  }
-  if (seconds >= 60 && seconds % 60 === 0) {
-    const m = seconds / 60;
-    return `every ${m} min`;
-  }
-  return `every ${seconds}s`;
-}
 
 interface Props {
   host?: HostInfo;

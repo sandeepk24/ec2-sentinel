@@ -25,6 +25,18 @@ export function fmtTime(iso: string | undefined): string {
   }
 }
 
+export function fmtRefreshInterval(seconds: number): string {
+  if (seconds >= 3600 && seconds % 3600 === 0) {
+    const h = seconds / 3600;
+    return `every ${h} hour${h === 1 ? "" : "s"}`;
+  }
+  if (seconds >= 60 && seconds % 60 === 0) {
+    const m = seconds / 60;
+    return `every ${m} min`;
+  }
+  return `every ${seconds}s`;
+}
+
 export type Level = "ok" | "warn" | "crit";
 
 export function levelForPercent(
