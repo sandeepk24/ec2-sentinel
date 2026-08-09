@@ -1,0 +1,5 @@
+# EC2 Sentinel — Python Dependencies
+# Core monitoring uses only stdlib + PyYAML.
+# No psutil, no heavy frameworks — reads /proc directly.
+
+PyYAML>=6.0

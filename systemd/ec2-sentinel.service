@@ -1,0 +1,30 @@
+[Unit]
+Description=EC2 Sentinel — Instance Health Monitor
+Documentation=https://github.com/YOUR_USER/ec2-sentinel
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/ec2-sentinel/sentinel.py --daemon --config /opt/ec2-sentinel/config.yaml
+WorkingDirectory=/opt/ec2-sentinel
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ec2-sentinel
+
+# Environment variables for secrets (set via override or drop-in)
+# EnvironmentFile=-/etc/ec2-sentinel/secrets.env
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/log /tmp
+PrivateTmp=true
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

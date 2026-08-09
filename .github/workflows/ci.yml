@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install flake8 mypy
+
+      - name: Lint with flake8
+        run: |
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --exit-zero --max-complexity=15 --max-line-length=120 --statistics
+
+      - name: Type check
+        run: |
+          mypy --ignore-missing-imports sentinel.py collectors/ alerts.py || true
+
+      - name: Smoke test — imports
+        run: |
+          python -c "from collectors.system import collect_cpu, collect_memory, collect_disks"
+          python -c "from collectors.process import collect_processes"
+          python -c "from collectors.logs import collect_logs"
+          python -c "from collectors.ports import collect_ports"
+          python -c "from alerts import Alert, dispatch_alerts"
+
+      - name: Smoke test — system collection
+        run: |
+          cd $GITHUB_WORKSPACE
+          python -c "
+          from collectors.system import collect_system
+          report = collect_system()
+          print(f'CPU: {report.cpu.usage_percent}%')
+          print(f'Memory: {report.memory.used_percent}%')
+          print(f'Disks: {len(report.disks)}')
+          print(f'Uptime: {report.uptime_human}')
+          assert report.cpu.core_count > 0
+          assert report.memory.total_bytes > 0
+          print('All system checks passed')
+          "
+
+      - name: Smoke test — port checker
+        run: |
+          python -c "
+          from collectors.ports import collect_ports
+          report = collect_ports([{'name': 'test', 'port': 99999}])
+          assert len(report.checks) == 1
+          assert not report.checks[0].is_open
+          print('Port check works')
+          "
+
+      - name: Smoke test — log scanner
+        run: |
+          echo 'ERROR something went wrong' > /tmp/test_sentinel.log
+          echo 'INFO all good' >> /tmp/test_sentinel.log
+          echo 'FATAL crash' >> /tmp/test_sentinel.log
+          python -c "
+          from collectors.logs import collect_logs
+          report = collect_logs(['ERROR', 'FATAL'], ['/tmp/test_sentinel.log'], incremental=False)
+          assert report.total_hits == 2
+          print(f'Found {report.total_hits} matches across {report.files_scanned} files')
+          print('Log scanner works')
+          "
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ShellCheck
+        run: |
+          sudo apt-get install -y shellcheck
+          shellcheck scripts/*.sh install.sh || true

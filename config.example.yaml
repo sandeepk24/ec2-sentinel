@@ -1,0 +1,127 @@
+# ============================================================================
+# EC2 Sentinel — Configuration
+# ============================================================================
+# Copy this file to config.yaml and edit for your environment.
+# Environment variables can be referenced as ${VAR_NAME} in string values.
+
+sentinel:
+  interval_seconds: 60           # scan frequency (seconds)
+  hostname_override: ""          # friendly name (blank = auto-detect)
+  log_file: "/var/log/ec2-sentinel.log"  # daemon mode log location
+
+# ---------------------------------------------------------------------------
+# Thresholds — when to warn vs panic
+# ---------------------------------------------------------------------------
+thresholds:
+  cpu_warn: 80                   # yellow zone
+  cpu_crit: 95                   # red zone
+  memory_warn: 80
+  memory_crit: 95
+  disk_warn: 75                  # catch disk issues early
+  disk_crit: 90                  # you need to act now
+  swap_warn: 50                  # swap thrashing kills build servers
+
+# ---------------------------------------------------------------------------
+# Processes — the services YOU care about on THIS server
+# ---------------------------------------------------------------------------
+# Each entry:
+#   name   — friendly display name
+#   match  — substring to search in the process command line
+#   port   — (optional) TCP port the service should be listening on
+processes:
+  - name: tomcat
+    match: "org.apache.catalina"
+    port: 8080
+
+  - name: jenkins
+    match: "jenkins.war"
+    port: 8443
+
+  - name: jboss
+    match: "jboss.home"
+    port: 9990
+
+  # Spring Boot example — match the jar name
+  - name: springboot-api
+    match: "myapp.jar"
+    port: 8081
+
+  # Bamboo example
+  # - name: bamboo
+  #   match: "atlassian-bamboo"
+  #   port: 8085
+
+  # ArgoCD example (if self-hosted)
+  # - name: argocd-server
+  #   match: "argocd-server"
+  #   port: 8080
+
+  # GitLab Runner
+  # - name: gitlab-runner
+  #   match: "gitlab-runner"
+
+  # Bitbucket (Atlassian self-hosted)
+  # - name: bitbucket
+  #   match: "atlassian-bitbucket"
+  #   port: 7990
+
+  # Jira (Atlassian self-hosted)
+  # - name: jira
+  #   match: "atlassian-jira"
+  #   port: 8080
+
+# Standalone port checks (services not tracked by process match)
+extra_ports: []
+  # - name: database
+  #   port: 5432
+  #   host: "10.0.1.100"    # check a remote host
+
+# ---------------------------------------------------------------------------
+# Log watching — scan for trouble patterns
+# ---------------------------------------------------------------------------
+log_watch:
+  patterns:
+    - "OutOfMemoryError"
+    - "No space left on device"
+    - "CRITICAL"
+    - "FATAL"
+    - "Connection refused"
+    - "Too many open files"
+    - "PermGen space"             # old JVMs
+    - "java.lang.StackOverflowError"
+    - "Cannot allocate memory"
+    - "Killed process"            # OOM killer
+
+  files:
+    - /var/log/syslog
+    - /var/log/messages
+    - /var/log/tomcat*/catalina.out
+    - /var/log/jenkins/jenkins.log
+    - /opt/jboss/standalone/log/server.log
+    # Add your application logs here
+
+# ---------------------------------------------------------------------------
+# Alerts — where to send notifications
+# ---------------------------------------------------------------------------
+alerts:
+  slack:
+    enabled: false
+    webhook_url: "${SENTINEL_SLACK_WEBHOOK}"     # set as env var
+    channel: "#ops-alerts"
+
+  email:
+    enabled: false
+    smtp_host: "smtp.company.com"
+    smtp_port: 587
+    smtp_user: "${SENTINEL_SMTP_USER}"
+    smtp_pass: "${SENTINEL_SMTP_PASS}"
+    to:
+      - "oncall@company.com"
+
+  pagerduty:
+    enabled: false
+    routing_key: "${SENTINEL_PD_KEY}"
+
+  webhook:
+    enabled: false
+    url: "https://your-webhook-endpoint.com/alerts"
