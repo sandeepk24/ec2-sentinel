@@ -128,6 +128,32 @@ export interface Report {
       created_since: string;
     }>;
   };
+  java?: {
+    enabled: boolean;
+    available: boolean;
+    error: string;
+    java_home: string | null;
+    default_java: string | null;
+    installation_count: number;
+    jdk_count: number;
+    installations: Array<{
+      path: string;
+      version: string;
+      vendor: string;
+      runtime_name: string;
+      raw_version: string;
+      is_jdk: boolean;
+      javac_version: string | null;
+      display: string;
+    }>;
+    processes: Array<{
+      pid: number;
+      name: string;
+      java_path: string | null;
+      version: string | null;
+      cmdline: string;
+    }>;
+  };
 }
 
 export interface Alert {

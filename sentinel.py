@@ -28,6 +28,7 @@ import yaml
 from alerts import Alert, dispatch_alerts
 from analyzers.diagnose import diagnose, diagnosis_to_dict
 from collectors.docker import collect_docker, reclaimable_bytes
+from collectors.java import collect_java
 from collectors.system import collect_system
 from collectors.process import collect_processes
 from collectors.logs import collect_logs
@@ -120,6 +121,11 @@ def get_log_config(config: dict) -> tuple[list[str], list[str]]:
 def get_docker_config(config: dict) -> dict:
     """Docker monitoring config — enabled by default when docker is present."""
     return config.get("docker", {"enabled": True})
+
+
+def get_java_config(config: dict) -> dict:
+    """Java/JDK discovery config — enabled by default."""
+    return config.get("java", {"enabled": True})
 
 
 # ---------------------------------------------------------------------------
@@ -287,7 +293,7 @@ def generate_alerts(
 
 def report_to_dict(
     system, proc_report, port_report, log_report, docker_report,
-    top_report=None, diagnosis=None,
+    top_report=None, diagnosis=None, java_report=None,
 ) -> dict:
     """Convert all reports to a JSON-serializable dict."""
     top_report = top_report or collect_top(limit=8, sample_seconds=0.5)
@@ -427,6 +433,42 @@ def report_to_dict(
                 for img in docker_report.images[:20]
             ],
         },
+        "java": _java_to_dict(java_report or collect_java({"enabled": False})),
+    }
+
+
+def _java_to_dict(java_report) -> dict:
+    return {
+        "enabled": java_report.enabled,
+        "available": java_report.available,
+        "error": java_report.error,
+        "java_home": java_report.java_home,
+        "default_java": java_report.default_java,
+        "installation_count": java_report.installation_count,
+        "jdk_count": java_report.jdk_count,
+        "installations": [
+            {
+                "path": j.path,
+                "version": j.version,
+                "vendor": j.vendor,
+                "runtime_name": j.runtime_name,
+                "raw_version": j.raw_version,
+                "is_jdk": j.is_jdk,
+                "javac_version": j.javac_version,
+                "display": j.display,
+            }
+            for j in java_report.installations
+        ],
+        "processes": [
+            {
+                "pid": p.pid,
+                "name": p.name,
+                "java_path": p.java_path,
+                "version": p.version,
+                "cmdline": p.cmdline,
+            }
+            for p in java_report.processes
+        ],
     }
 
 
@@ -447,6 +489,7 @@ def run_scan(config: dict) -> dict:
     process_cfgs = get_process_configs(config)
     port_cfgs = get_port_configs(config)
     docker_cfg = get_docker_config(config)
+    java_cfg = get_java_config(config)
     log_patterns, log_files = get_log_config(config)
 
     system = collect_system()
@@ -454,6 +497,7 @@ def run_scan(config: dict) -> dict:
     port_report = collect_ports(port_cfgs)
     log_report = collect_logs(log_patterns, log_files)
     docker_report = collect_docker(docker_cfg)
+    java_report = collect_java(java_cfg)
     top_report = collect_top(limit=8, sample_seconds=1.0)
     diagnosis = diagnose(
         system, top_report, docker_report, proc_report, port_report, log_report, thresholds,
@@ -470,6 +514,7 @@ def run_scan(config: dict) -> dict:
         "port_report": port_report,
         "log_report": log_report,
         "docker_report": docker_report,
+        "java_report": java_report,
         "top_report": top_report,
         "diagnosis": diagnosis,
         "docker_cfg": docker_cfg,
@@ -487,6 +532,7 @@ def build_health_payload(config: dict, reports_dir: Path | None = None) -> dict:
     port_report = scan["port_report"]
     log_report = scan["log_report"]
     docker_report = scan["docker_report"]
+    java_report = scan["java_report"]
     top_report = scan["top_report"]
     diagnosis = scan["diagnosis"]
     thresholds = scan["thresholds"]
@@ -496,7 +542,7 @@ def build_health_payload(config: dict, reports_dir: Path | None = None) -> dict:
         "source": "live",
         "report": report_to_dict(
             system, proc_report, port_report, log_report, docker_report,
-            top_report, diagnosis,
+            top_report, diagnosis, java_report,
         ),
         "alerts": [alert_to_dict(a) for a in alerts],
         "verdict": build_verdict_dict(
@@ -533,6 +579,7 @@ def run_once(config: dict, output_json: bool = False) -> int:
     port_report = scan["port_report"]
     log_report = scan["log_report"]
     docker_report = scan["docker_report"]
+    java_report = scan["java_report"]
     top_report = scan["top_report"]
     diagnosis = scan["diagnosis"]
     thresholds = scan["thresholds"]
@@ -541,13 +588,13 @@ def run_once(config: dict, output_json: bool = False) -> int:
     if output_json:
         data = report_to_dict(
             system, proc_report, port_report, log_report, docker_report,
-            top_report, diagnosis,
+            top_report, diagnosis, java_report,
         )
         print(json.dumps(data, indent=2))
     else:
         print(render_full_report(
             system, proc_report, port_report, log_report, docker_report,
-            thresholds, top_report, diagnosis,
+            thresholds, top_report, diagnosis, java_report,
         ))
 
     # Dispatch alerts
@@ -600,6 +647,7 @@ def run_watch(config: dict) -> None:
     port_cfgs = get_port_configs(config)
     log_patterns, log_files = get_log_config(config)
     docker_cfg = get_docker_config(config)
+    java_cfg = get_java_config(config)
 
     while running:
         # Clear screen
@@ -610,6 +658,7 @@ def run_watch(config: dict) -> None:
         port_report = collect_ports(port_cfgs)
         log_report = collect_logs(log_patterns, log_files)
         docker_report = collect_docker(docker_cfg)
+        java_report = collect_java(java_cfg)
         top_report = collect_top(limit=8, sample_seconds=1.0)
         diagnosis = diagnose(
             system, top_report, docker_report, proc_report, port_report,
@@ -618,7 +667,7 @@ def run_watch(config: dict) -> None:
 
         print(render_full_report(
             system, proc_report, port_report, log_report, docker_report,
-            thresholds, top_report, diagnosis,
+            thresholds, top_report, diagnosis, java_report,
         ))
         print(f"  Refreshing every {interval}s. Press Ctrl+C to stop.")
 
@@ -663,6 +712,7 @@ def run_daemon(config: dict) -> None:
     port_cfgs = get_port_configs(config)
     log_patterns, log_files = get_log_config(config)
     docker_cfg = get_docker_config(config)
+    java_cfg = get_java_config(config)
 
     while running:
         try:
@@ -671,6 +721,7 @@ def run_daemon(config: dict) -> None:
             port_report = collect_ports(port_cfgs)
             log_report = collect_logs(log_patterns, log_files)
             docker_report = collect_docker(docker_cfg)
+            java_report = collect_java(java_cfg)
             top_report = collect_top(limit=8, sample_seconds=1.0)
             diagnosis = diagnose(
                 system, top_report, docker_report, proc_report, port_report,
@@ -697,7 +748,7 @@ def run_daemon(config: dict) -> None:
             logger.info(f"Diagnosis: {diagnosis.headline} — {diagnosis.summary}")
             data = report_to_dict(
                 system, proc_report, port_report, log_report, docker_report,
-                top_report, diagnosis,
+                top_report, diagnosis, java_report,
             )
             logger.debug(json.dumps(data))
 

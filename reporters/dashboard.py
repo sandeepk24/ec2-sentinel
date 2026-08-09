@@ -9,6 +9,7 @@ import sys
 from typing import Optional
 
 from collectors.docker import DockerReport
+from collectors.java import JavaReport
 from collectors.system import SystemReport
 from collectors.process import ProcessReport
 from collectors.logs import LogReport
@@ -308,6 +309,59 @@ def render_docker(docker_report: DockerReport) -> str:
     return "\n".join(lines)
 
 
+def render_java(java_report: JavaReport) -> str:
+    if not java_report.enabled:
+        return ""
+
+    if not java_report.available:
+        if java_report.error == "disabled in config":
+            return ""
+        msg = java_report.error or "not found"
+        home = f"  JAVA_HOME: {java_report.java_home}" if java_report.java_home else ""
+        return f"\n  {C.BOLD}JAVA / JDK{C.RESET}\n  └─ {C.YELLOW}Not detected ({msg}){C.RESET}{home}"
+
+    lines = [
+        f"\n  {C.BOLD}JAVA / JDK{C.RESET} "
+        f"({java_report.installation_count} runtime(s), {java_report.jdk_count} JDK)",
+    ]
+    if java_report.java_home:
+        lines.append(f"  ├─ JAVA_HOME {'.' * 10} {java_report.java_home}")
+    if java_report.default_java:
+        lines.append(f"  ├─ Default java {'.' * 7} {java_report.default_java}")
+
+    for i, inst in enumerate(java_report.installations[:8]):
+        is_last = i == min(len(java_report.installations), 8) - 1 and not java_report.processes
+        prefix = "└─" if is_last else "├─"
+        kind = "JDK" if inst.is_jdk else "JRE"
+        kind_color = f"{C.GREEN}{kind}{C.RESET}" if inst.is_jdk else f"{C.CYAN}{kind}{C.RESET}"
+        ver = f"{inst.vendor} {inst.version}"
+        path = inst.path
+        if len(path) > 42:
+            path = "…" + path[-41:]
+        lines.append(
+            f"  {prefix} {ver} {'.' * max(1, 24 - len(ver))} "
+            f"{kind_color}  {C.DIM}{path}{C.RESET}"
+        )
+        if inst.javac_version and inst.javac_version != inst.version:
+            lines.append(f"  {C.DIM}     javac {inst.javac_version}{C.RESET}")
+
+    if len(java_report.installations) > 8:
+        lines.append(f"  {C.DIM}  … and {len(java_report.installations) - 8} more{C.RESET}")
+
+    if java_report.processes:
+        lines.append(f"  ├─ Running JVMs {'.' * 8} {len(java_report.processes)}")
+        for i, proc in enumerate(java_report.processes[:5]):
+            prefix = "└─" if i == min(len(java_report.processes), 5) - 1 else "├─"
+            ver = proc.version or "?"
+            name = proc.name[:16]
+            lines.append(
+                f"  {prefix} pid {proc.pid} {name} {'.' * max(1, 10 - len(name))} "
+                f"{C.DIM}Java {ver}{C.RESET}"
+            )
+
+    return "\n".join(lines)
+
+
 def render_ports(port_report: PortReport) -> str:
     lines = [f"\n  {C.BOLD}PORTS{C.RESET}"]
 
@@ -513,6 +567,7 @@ def render_full_report(
     thresholds: dict,
     top_report: Optional[TopReport] = None,
     diagnosis=None,
+    java_report: Optional[JavaReport] = None,
 ) -> str:
     """Render the complete terminal dashboard."""
     sections = [
@@ -522,6 +577,7 @@ def render_full_report(
         render_top(top_report),
         render_disks(system, thresholds),
         render_processes(proc_report),
+        render_java(java_report) if java_report else "",
         render_docker(docker_report),
         render_ports(port_report),
         render_logs(log_report),

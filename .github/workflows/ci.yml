@@ -43,6 +43,7 @@ jobs:
           python -c "from collectors.logs import collect_logs"
           python -c "from collectors.ports import collect_ports"
           python -c "from collectors.docker import collect_docker"
+          python -c "from collectors.java import collect_java"
           python -c "from collectors.top import collect_top"
           python -c "from analyzers.diagnose import diagnose"
           python -c "from alerts import Alert, dispatch_alerts"
@@ -81,6 +82,19 @@ jobs:
           if report.error:
               print(f'Note: {report.error}')
           print('Docker collector works')
+          "
+
+      - name: Smoke test — java collector
+        run: |
+          python -c "
+          from collectors.java import collect_java
+          report = collect_java({'enabled': True})
+          print(f'Java enabled: {report.enabled}, available: {report.available}')
+          for j in report.installations:
+              print(f'  {j.display} @ {j.path}')
+          if report.error and not report.available:
+              print(f'Note: {report.error}')
+          print('Java collector works')
           "
 
       - name: Smoke test — top consumers + diagnosis

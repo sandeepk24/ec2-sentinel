@@ -40,6 +40,13 @@ docker:
     #   match: "myapp-api"
 
 # ---------------------------------------------------------------------------
+# Java / JDK — discover installed runtimes and version numbers
+# ---------------------------------------------------------------------------
+java:
+  enabled: true                  # set false to skip java -version discovery
+  search_paths: []               # extra dirs to scan (default: /usr/lib/jvm, /opt, …)
+
+# ---------------------------------------------------------------------------
 # Processes — the services YOU care about on THIS server
 # ---------------------------------------------------------------------------
 # Each entry:

@@ -87,6 +87,7 @@ If your daily routine looks anything like this, EC2 Sentinel was built for you:
 | **Ports** | TCP listener checks for known services | Tomcat not listening on 8080? Catch it before users do. |
 | **Logs** | Pattern scanning for errors, OOM, disk warnings | Grep at scale — find "OutOfMemoryError" across 30 log files. |
 | **Docker** | Containers, images, disk usage, health checks | Build servers and app hosts running Docker — catch stopped or unhealthy containers. |
+| **Java / JDK** | Installed runtimes, version numbers, JDK vs JRE | Lists OpenJDK, Corretto, Oracle, etc. via `java -version` on each binary found. |
 | **Network** | Connectivity to downstream dependencies | Your app is up but can't reach the database? That's this. |
 
 ## Deployment Model — Read This First
@@ -392,6 +393,7 @@ ec2-sentinel/
 │   ├── logs.py              # Log file pattern scanning
 │   ├── ports.py             # TCP port/listener checks
 │   ├── docker.py            # Docker containers, images, disk usage
+│   ├── java.py              # Java/JDK discovery and version reporting
 │   └── top.py               # Top CPU / memory consumers
 ├── analyzers/
 │   └── diagnose.py          # Why-is-this-slow narrative for juniors

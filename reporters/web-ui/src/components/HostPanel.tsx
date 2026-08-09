@@ -207,6 +207,73 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
         />
       </div>
 
+      {r.java?.enabled && (
+        <div className="space-y-4">
+          {!r.java.available ? (
+            <div className="dash-panel px-5 py-4">
+              <h3 className="dash-heading text-amber-700 dark:text-amber-300/80">Java / JDK</h3>
+              <p className="mt-2 text-sm dash-muted">
+                {r.java.error || "No Java runtime detected on this host."}
+                {r.java.java_home && (
+                  <span className="block mt-1 font-mono text-xs">
+                    JAVA_HOME={r.java.java_home}
+                  </span>
+                )}
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="dash-stat-card border-amber-200/80 bg-gradient-to-br from-amber-50 to-white dark:border-amber-500/25 dark:from-amber-950/50 dark:to-[#0a1020]">
+                  <p className="dash-heading text-amber-700 dark:text-amber-300/70">Runtimes</p>
+                  <p className="mt-2 font-mono text-2xl font-bold dash-title">
+                    {r.java.installation_count}
+                  </p>
+                </div>
+                <div className="dash-stat-card border-orange-200/80 bg-gradient-to-br from-orange-50 to-white dark:border-orange-500/25 dark:from-orange-950/50 dark:to-[#0a1020]">
+                  <p className="dash-heading text-orange-700 dark:text-orange-300/70">JDK installs</p>
+                  <p className="mt-2 font-mono text-2xl font-bold dash-title">{r.java.jdk_count}</p>
+                </div>
+                <div className="dash-stat-card border-yellow-200/80 bg-gradient-to-br from-yellow-50 to-white dark:border-yellow-500/25 dark:from-yellow-950/50 dark:to-[#0a1020]">
+                  <p className="dash-heading text-yellow-700 dark:text-yellow-300/70">Running JVMs</p>
+                  <p className="mt-2 font-mono text-2xl font-bold dash-title">
+                    {r.java.processes.length}
+                  </p>
+                </div>
+              </div>
+              <DataTable
+                title="Java installations"
+                headers={["Vendor", "Version", "Type", "Path", "javac"]}
+                rows={r.java.installations.map((j) => [
+                  j.vendor,
+                  j.version,
+                  j.is_jdk ? "JDK" : "JRE",
+                  j.path.length > 48 ? "…" + j.path.slice(-47) : j.path,
+                  j.javac_version ?? "—",
+                ])}
+              />
+              {r.java.processes.length > 0 && (
+                <DataTable
+                  title="Running Java processes"
+                  headers={["PID", "Name", "Java version", "Binary", "Command"]}
+                  rows={r.java.processes.map((p) => [
+                    String(p.pid),
+                    p.name,
+                    p.version ?? "—",
+                    p.java_path
+                      ? p.java_path.length > 32
+                        ? "…" + p.java_path.slice(-31)
+                        : p.java_path
+                      : "—",
+                    p.cmdline.length > 50 ? p.cmdline.slice(0, 50) + "…" : p.cmdline,
+                  ])}
+                />
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       {r.docker?.available && (
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-4">
