@@ -98,7 +98,7 @@ def _parse_version_output(output: str) -> tuple[str, str, str]:
     if quoted:
         version = quoted.group(1)
     else:
-        bare = re.search(r"(?:openjdk|java)\s+(\d+(?:\.\d+)*)", first, re.I)
+        bare = re.search(r"(?:openjdk|java|javac)\s+(\d+(?:\.\d+)*)", first, re.I)
         if bare:
             version = bare.group(1)
 
