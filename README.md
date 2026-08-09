@@ -64,6 +64,70 @@ If your daily routine looks anything like this, EC2 Sentinel was built for you:
 | **Logs** | Pattern scanning for errors, OOM, disk warnings | Grep at scale — find "OutOfMemoryError" across 30 log files. |
 | **Network** | Connectivity to downstream dependencies | Your app is up but can't reach the database? That's this. |
 
+## Deployment Model — Read This First
+
+> **Disclaimer:** EC2 Sentinel is a **local on-instance agent**. It does **not** SSH into
+> servers, connect to AWS APIs, or provide a central multi-host dashboard out of the box.
+> If you're looking for a tool that polls your fleet from one place, this isn't it — and
+> that's intentional.
+
+### How it actually works
+
+EC2 Sentinel runs **on each EC2 instance you want to monitor**. It reads that machine's
+own resources directly — `/proc`, local log files, TCP port checks, and the EC2 Instance
+Metadata Service (IMDS at `169.254.169.254`). No AWS credentials, boto3, or remote access
+required.
+
+```
+  You (SSH once to install)          Each EC2 instance runs its own Sentinel
+         │                                    │
+         ▼                                    ▼
+  ┌─────────────┐              ┌──────────────────────────────┐
+  │ install.sh  │─────────────▶│  Sentinel on instance A    │──▶ Slack / PagerDuty
+  │  or Ansible │              │  (monitors itself locally) │
+  └─────────────┘              └──────────────────────────────┘
+         │
+         └────────────────────▶┌──────────────────────────────┐
+                              │  Sentinel on instance B    │──▶ Slack / PagerDuty
+                              │  (monitors itself locally) │
+                              └──────────────────────────────┘
+```
+
+### To monitor 10 EC2 instances
+
+Install Sentinel on **all 10**. Each instance:
+
+1. Collects its own CPU, memory, disk, process, port, and log data
+2. Evaluates thresholds from its own `config.yaml`
+3. Sends its own alerts (Slack, email, PagerDuty, webhook, or JSON to stdout)
+
+Common install paths:
+
+| Method | When to use |
+|--------|-------------|
+| `install.sh --systemd` | Manual or one-off setup |
+| EC2 user-data | Auto-install on launch |
+| Ansible / Terraform | Fleet rollout |
+
+### What it does NOT do
+
+| Expectation | Reality |
+|-------------|---------|
+| SSH into remote servers | ❌ No SSH client — runs locally only |
+| Discover EC2 instances via AWS API | ❌ No boto3 or IAM permissions needed |
+| Central web dashboard for all hosts | ❌ Terminal dashboard is per-instance; aggregate alerts in Slack/PagerDuty instead |
+| Replace CloudWatch entirely | ❌ Complements CloudWatch with on-box checks CloudWatch misses |
+
+The README mentions SSH because **you** SSH in to install or troubleshoot — Sentinel
+itself never opens SSH sessions. The only optional remote behavior is a TCP port check
+to another host (e.g. a database on `10.0.1.100`), which is not SSH.
+
+### Want a central dashboard?
+
+That would be a separate tool or layer — for example, pipe `--once --json` output from
+each instance into CloudWatch, Datadog, or a log aggregator, and build a fleet view there.
+EC2 Sentinel stays lightweight by design: one agent per box, zero AWS permissions.
+
 ## Quick Start
 
 ### One-Line Install (recommended)
