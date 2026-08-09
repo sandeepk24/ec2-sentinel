@@ -4,6 +4,7 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+!reporters/web/dist/
 .venv/
 venv/
 
@@ -23,3 +24,6 @@ Thumbs.db
 
 # Sentinel runtime files
 /tmp/ec2_sentinel_*.json
+
+# Dashboard UI (Node build tooling only — dist is committed)
+reporters/web-ui/node_modules/

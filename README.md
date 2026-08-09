@@ -176,6 +176,27 @@ python sentinel.py --daemon
 python sentinel.py --web
 ```
 
+The dashboard is a **React + Vite** app with rich gradients, Outfit & JetBrains Mono fonts,
+and animated metric bars. It auto-refreshes and works offline on the instance — no Node
+required at runtime (built assets live in `reporters/web/dist/`).
+
+**Develop the UI locally:**
+
+```bash
+# Terminal 1 — API server
+python sentinel.py --web --no-browser
+
+# Terminal 2 — hot reload frontend
+cd reporters/web-ui && npm install && npm run dev
+# Opens http://localhost:5173 (proxies /api to :8765)
+```
+
+**Rebuild after UI changes:**
+
+```bash
+cd reporters/web-ui && npm run build
+```
+
 ### What You'll See
 
 ```
@@ -339,8 +360,9 @@ ec2-sentinel/
 │   ├── __init__.py
 │   ├── dashboard.py         # Terminal output and formatting
 │   ├── web_server.py        # Local HTTP server for --web mode
-│   └── web/
-│       └── dashboard.html   # Browser dashboard (localhost)
+│   ├── web/
+│   │   └── dist/            # Built React dashboard (served by --web)
+│   └── web-ui/              # React + Vite source (npm run build)
 ├── scripts/
 │   ├── quick-check.sh       # Zero-dependency bash health check
 │   └── disk-cleanup.sh      # Safe disk cleanup for build servers

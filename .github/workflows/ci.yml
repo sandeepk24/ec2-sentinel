@@ -82,6 +82,22 @@ jobs:
           print('Log scanner works')
           "
 
+  dashboard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build React dashboard
+        run: |
+          cd reporters/web-ui
+          npm ci
+          npm run build
+          test -f ../web/dist/index.html
+
   shellcheck:
     runs-on: ubuntu-latest
     steps:
