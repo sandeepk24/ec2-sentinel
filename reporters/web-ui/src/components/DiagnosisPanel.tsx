@@ -79,10 +79,10 @@ export function DiagnosisPanel({ report }: { report: Report }) {
 
   const healthStyle =
     d.health === "critical"
-      ? "dash-hero-crit dark:from-rose-600/40 dark:to-rose-900/20"
+      ? "dash-hero-crit"
       : d.health === "degraded"
-        ? "dash-hero-warn dark:from-amber-600/30 dark:to-amber-900/20"
-        : "dash-hero-ok dark:from-emerald-600/30 dark:to-emerald-900/20";
+        ? "dash-hero-warn"
+        : "dash-hero-ok";
 
   const badge =
     d.health === "critical"
@@ -233,10 +233,10 @@ export function DiagnosisPanel({ report }: { report: Report }) {
               key={i}
               className={`rounded-2xl border-l-4 px-5 py-4 ${
                 f.severity === "critical"
-                  ? "border-rose-500 bg-gradient-to-r from-rose-50 to-white dark:from-rose-500/10 dark:to-transparent"
+                  ? "border-rose-500 bg-gradient-to-r from-rose-50 to-white dark:from-rose-950/40 dark:to-[#0a1020]"
                   : f.severity === "warning"
-                    ? "border-amber-500 bg-gradient-to-r from-amber-50 to-white dark:from-amber-500/10 dark:to-transparent"
-                    : "border-slate-300 bg-slate-50 dark:border-slate-500 dark:bg-white/[0.03]"
+                    ? "border-amber-500 bg-gradient-to-r from-amber-50 to-white dark:from-amber-950/40 dark:to-[#0a1020]"
+                    : "border-slate-300 bg-slate-50 dark:border-slate-500 dark:bg-[#0a1020]/60"
               }`}
             >
               <div className="flex flex-wrap items-center gap-2">

@@ -56,7 +56,7 @@ export function HeaderBar({
           </div>
         </div>
         {host && (
-          <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-2xl border border-indigo-100/70 bg-indigo-50/40 px-3 py-2 text-sm dash-muted dark:border-transparent dark:bg-transparent dark:px-0 dark:py-0">
+          <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-2xl border border-indigo-100/70 bg-indigo-50/40 px-3 py-2 text-sm dash-muted dark:border-white/10 dark:bg-white/[0.04] dark:px-3 dark:py-2">
             <Activity className="inline h-3.5 w-3.5 text-teal-600 dark:text-cyan-400" />
             <span className="font-mono font-semibold text-teal-800 dark:text-cyan-300/90">{host.hostname}</span>
             <span className="text-indigo-200 dark:text-slate-600">·</span>

@@ -210,7 +210,7 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
       {r.docker?.available && (
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-4">
-            <div className="dash-stat-card border-cyan-200/80 bg-gradient-to-br from-cyan-50 to-white dark:border-cyan-500/20 dark:from-cyan-500/5 dark:to-transparent">
+            <div className="dash-stat-card border-cyan-200/80 bg-gradient-to-br from-cyan-50 to-white dark:border-cyan-500/25 dark:from-cyan-950/50 dark:to-[#0a1020]">
               <p className="dash-heading text-cyan-700 dark:text-cyan-300/70">
                 Docker
               </p>
@@ -218,7 +218,7 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
                 v{r.docker.server_version}
               </p>
             </div>
-            <div className="dash-stat-card border-emerald-200/80 bg-gradient-to-br from-emerald-50 to-white dark:border-emerald-500/20 dark:from-emerald-500/5 dark:to-transparent">
+            <div className="dash-stat-card border-emerald-200/80 bg-gradient-to-br from-emerald-50 to-white dark:border-emerald-500/25 dark:from-emerald-950/50 dark:to-[#0a1020]">
               <p className="dash-heading text-emerald-700 dark:text-emerald-300/70">
                 Containers
               </p>
@@ -234,7 +234,7 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
                 </p>
               )}
             </div>
-            <div className="dash-stat-card border-violet-200/80 bg-gradient-to-br from-violet-50 to-white dark:border-violet-500/20 dark:from-violet-500/5 dark:to-transparent">
+            <div className="dash-stat-card border-violet-200/80 bg-gradient-to-br from-violet-50 to-white dark:border-violet-500/25 dark:from-violet-950/50 dark:to-[#0a1020]">
               <p className="dash-heading text-violet-700 dark:text-violet-300/70">
                 Images
               </p>
@@ -242,7 +242,7 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
                 {r.docker.image_count}
               </p>
             </div>
-            <div className="dash-stat-card border-fuchsia-200/80 bg-gradient-to-br from-fuchsia-50 to-white dark:border-fuchsia-500/20 dark:from-fuchsia-500/5 dark:to-transparent">
+            <div className="dash-stat-card border-fuchsia-200/80 bg-gradient-to-br from-fuchsia-50 to-white dark:border-fuchsia-500/25 dark:from-fuchsia-950/50 dark:to-[#0a1020]">
               <p className="dash-heading text-fuchsia-700 dark:text-fuchsia-300/70">
                 Reclaimable
               </p>
@@ -393,8 +393,8 @@ function AlertList({ alerts }: { alerts: Alert[] }) {
             key={i}
             className={`rounded-xl border-l-4 px-4 py-3 ${
               a.severity === "critical"
-                ? "border-rose-500 bg-gradient-to-r from-rose-50 to-white dark:from-rose-500/10 dark:to-transparent"
-                : "border-amber-500 bg-gradient-to-r from-amber-50 to-white dark:from-amber-500/10 dark:to-transparent"
+                ? "border-rose-500 bg-gradient-to-r from-rose-50 to-white dark:from-rose-950/40 dark:to-[#0a1020]"
+                : "border-amber-500 bg-gradient-to-r from-amber-50 to-white dark:from-amber-950/40 dark:to-[#0a1020]"
             }`}
           >
             <p className="font-semibold dash-title">{a.title}</p>

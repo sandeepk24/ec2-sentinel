@@ -4,13 +4,19 @@ import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, Loader2, ServerCrash } from "lucide-react";
 import { fetchHealth } from "./lib/api";
 import { useHistoryStore } from "./store/history";
+import { applyTheme, useThemeStore } from "./store/theme";
 import { HeaderBar } from "./components/HeaderBar";
 import { LiveCharts } from "./components/LiveCharts";
 import { HostPanel } from "./components/HostPanel";
 
 export default function App() {
   const pushHistory = useHistoryStore((s) => s.push);
+  const theme = useThemeStore((s) => s.theme);
   const [countdown, setCountdown] = useState(30);
+
+  useEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
 
   const query = useQuery({
     queryKey: ["health"],
@@ -55,30 +61,38 @@ export default function App() {
 
   return (
     <div className="relative min-h-screen overflow-x-hidden">
-      {/* Light: pearl mesh · Dark: deep space */}
-      <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(165deg,#f8faff_0%,#f3f0ff_38%,#eef8ff_100%)] dark:bg-[#070b14]" />
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_15%_-5%,rgba(99,102,241,0.22)_0%,transparent_52%)] dark:bg-[radial-gradient(ellipse_at_top,_rgba(99,102,241,0.28)_0%,_transparent_50%)]" />
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_85%_0%,rgba(14,165,233,0.16)_0%,transparent_45%)] dark:bg-[radial-gradient(ellipse_at_bottom_right,_rgba(236,72,153,0.16)_0%,_transparent_45%)]" />
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_50%_100%,rgba(168,85,247,0.14)_0%,transparent_50%)] dark:bg-[radial-gradient(ellipse_at_bottom_left,_rgba(34,211,238,0.12)_0%,_transparent_40%)]" />
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_100%_80%,rgba(244,114,182,0.1)_0%,transparent_40%)] dark:hidden" />
-      {/* Light grid */}
-      <div
-        className="pointer-events-none fixed inset-0 opacity-[0.35] dark:hidden"
-        style={{
-          backgroundImage:
-            "linear-gradient(rgba(79,70,229,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(79,70,229,0.06) 1px, transparent 1px)",
-          backgroundSize: "56px 56px",
-        }}
-      />
-      {/* Dark grid */}
-      <div
-        className="pointer-events-none fixed inset-0 hidden opacity-[0.035] dark:block"
-        style={{
-          backgroundImage:
-            "linear-gradient(rgba(255,255,255,.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.6) 1px, transparent 1px)",
-          backgroundSize: "48px 48px",
-        }}
-      />
+      {/* Light backdrop — fully hidden in dark mode */}
+      <div className="pointer-events-none fixed inset-0 dark:hidden">
+        <div className="absolute inset-0 bg-[linear-gradient(165deg,#f8faff_0%,#f3f0ff_38%,#eef8ff_100%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_15%_-5%,rgba(99,102,241,0.22)_0%,transparent_52%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_85%_0%,rgba(14,165,233,0.16)_0%,transparent_45%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_100%,rgba(168,85,247,0.14)_0%,transparent_50%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_100%_80%,rgba(244,114,182,0.1)_0%,transparent_40%)]" />
+        <div
+          className="absolute inset-0 opacity-[0.35]"
+          style={{
+            backgroundImage:
+              "linear-gradient(rgba(79,70,229,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(79,70,229,0.06) 1px, transparent 1px)",
+            backgroundSize: "56px 56px",
+          }}
+        />
+      </div>
+
+      {/* Dark backdrop — restored deep-space look */}
+      <div className="pointer-events-none fixed inset-0 hidden dark:block">
+        <div className="absolute inset-0 bg-[#070b14]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(99,102,241,0.28)_0%,_transparent_50%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,_rgba(236,72,153,0.16)_0%,_transparent_45%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,_rgba(34,211,238,0.12)_0%,_transparent_40%)]" />
+        <div
+          className="absolute inset-0 opacity-[0.035]"
+          style={{
+            backgroundImage:
+              "linear-gradient(rgba(255,255,255,.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.6) 1px, transparent 1px)",
+            backgroundSize: "48px 48px",
+          }}
+        />
+      </div>
 
       <div className="relative z-10 mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <HeaderBar
@@ -116,7 +130,7 @@ export default function App() {
               key="error"
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              className="rounded-2xl border border-rose-200 bg-gradient-to-br from-rose-50 to-white px-6 py-10 text-center shadow-[0_8px_40px_rgba(244,63,94,0.1)] backdrop-blur-xl dark:border-rose-500/30 dark:from-rose-500/10 dark:to-transparent dark:shadow-none"
+              className="rounded-2xl border border-rose-200 bg-gradient-to-br from-rose-50 to-white px-6 py-10 text-center shadow-[0_8px_40px_rgba(244,63,94,0.1)] backdrop-blur-xl dark:border-rose-500/30 dark:from-rose-950/40 dark:to-[#0a1020] dark:shadow-none"
             >
               <ServerCrash className="mx-auto mb-3 h-10 w-10 text-rose-500 dark:text-rose-300" />
               <p className="text-lg font-semibold text-rose-700 dark:text-rose-200">
@@ -143,7 +157,7 @@ export default function App() {
               className="space-y-8"
             >
               {query.isError && (
-                <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50/80 px-4 py-2 text-sm text-amber-950 shadow-sm dark:border-amber-500/30 dark:from-amber-500/10 dark:to-transparent dark:text-amber-100 dark:shadow-none">
+                <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50/80 px-4 py-2 text-sm text-amber-950 shadow-sm dark:border-amber-500/30 dark:from-amber-950/40 dark:to-[#0a1020] dark:text-amber-100 dark:shadow-none">
                   <AlertTriangle className="h-4 w-4" />
                   Last refresh failed — showing cached data
                 </div>
