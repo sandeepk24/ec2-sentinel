@@ -5,13 +5,24 @@ import { fmtTime, verdictStyles } from "../utils";
 import type { HostInfo, Verdict } from "../types";
 import { ThemeToggle } from "./ThemeToggle";
 
+function fmtRefreshInterval(seconds: number): string {
+  if (seconds >= 3600 && seconds % 3600 === 0) {
+    const h = seconds / 3600;
+    return `every ${h} hour${h === 1 ? "" : "s"}`;
+  }
+  if (seconds >= 60 && seconds % 60 === 0) {
+    const m = seconds / 60;
+    return `every ${m} min`;
+  }
+  return `every ${seconds}s`;
+}
+
 interface Props {
   host?: HostInfo;
   scannedAt?: string;
   verdict?: Verdict["status"];
   refreshing: boolean;
   lastUpdated?: Date;
-  countdown: number;
   onRefresh: () => void;
   intervalSeconds: number;
 }
@@ -22,7 +33,6 @@ export function HeaderBar({
   verdict = "ok",
   refreshing,
   lastUpdated,
-  countdown,
   onRefresh,
   intervalSeconds,
 }: Props) {
@@ -92,7 +102,7 @@ export function HeaderBar({
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-60 dark:bg-emerald-400" />
             <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500 dark:bg-emerald-400" />
           </span>
-          Live · next in {countdown}s / {intervalSeconds}s
+          Live · {fmtRefreshInterval(intervalSeconds)}
           {lastUpdated && (
             <span className="hidden text-slate-400 sm:inline dark:text-slate-600">
               · updated {lastUpdated.toLocaleTimeString()}

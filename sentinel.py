@@ -557,7 +557,7 @@ def build_health_payload(config: dict, reports_dir: Path | None = None) -> dict:
             fleet_dir = Path(cfg_dir)
 
     fleet = load_fleet_reports(fleet_dir)
-    interval = config.get("sentinel", {}).get("interval_seconds", 30)
+    interval = config.get("sentinel", {}).get("interval_seconds", 300)
 
     return {
         "live": live,
@@ -629,7 +629,7 @@ def run_web(
 # ---------------------------------------------------------------------------
 def run_watch(config: dict) -> None:
     """Continuous terminal dashboard — clears and re-renders each cycle."""
-    interval = config.get("sentinel", {}).get("interval_seconds", 30)
+    interval = config.get("sentinel", {}).get("interval_seconds", 300)
 
     # Handle Ctrl+C gracefully
     running = True
@@ -695,7 +695,7 @@ def run_daemon(config: dict) -> None:
     logger = logging.getLogger("ec2-sentinel")
     logger.info("EC2 Sentinel daemon started")
 
-    interval = config.get("sentinel", {}).get("interval_seconds", 60)
+    interval = config.get("sentinel", {}).get("interval_seconds", 300)
 
     running = True
 

@@ -5,7 +5,7 @@
 # Environment variables can be referenced as ${VAR_NAME} in string values.
 
 sentinel:
-  interval_seconds: 60           # scan frequency (seconds)
+  interval_seconds: 300          # scan frequency (seconds) — default 5 minutes
   hostname_override: ""          # friendly name (blank = auto-detect)
   log_file: "/var/log/ec2-sentinel.log"  # daemon mode log location
   web_port: 8765                 # local dashboard port (--web)

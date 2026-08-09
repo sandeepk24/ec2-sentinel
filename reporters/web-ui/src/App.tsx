@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, Loader2, ServerCrash } from "lucide-react";
@@ -12,7 +12,6 @@ import { HostPanel } from "./components/HostPanel";
 export default function App() {
   const pushHistory = useHistoryStore((s) => s.push);
   const theme = useThemeStore((s) => s.theme);
-  const [countdown, setCountdown] = useState(30);
 
   useEffect(() => {
     applyTheme(theme);
@@ -21,13 +20,13 @@ export default function App() {
   const query = useQuery({
     queryKey: ["health"],
     queryFn: fetchHealth,
-    refetchInterval: (q) => (q.state.data?.refresh_seconds ?? 30) * 1000,
+    refetchInterval: (q) => (q.state.data?.refresh_seconds ?? 300) * 1000,
     refetchIntervalInBackground: true,
     retry: 2,
     staleTime: 5_000,
   });
 
-  const intervalSeconds = query.data?.refresh_seconds ?? 30;
+  const intervalSeconds = query.data?.refresh_seconds ?? 300;
 
   // Push samples into client-side history for live charts
   useEffect(() => {
@@ -41,15 +40,6 @@ export default function App() {
       steal: report.cpu.steal_percent ?? 0,
     });
   }, [query.dataUpdatedAt, query.data?.live?.report, pushHistory]);
-
-  // Countdown to next poll
-  useEffect(() => {
-    setCountdown(intervalSeconds);
-    const id = setInterval(() => {
-      setCountdown((c) => (c <= 1 ? intervalSeconds : c - 1));
-    }, 1000);
-    return () => clearInterval(id);
-  }, [intervalSeconds, query.dataUpdatedAt]);
 
   const live = query.data?.live;
   const host = live?.report.host;
@@ -101,7 +91,6 @@ export default function App() {
           verdict={verdict}
           refreshing={query.isFetching}
           lastUpdated={lastUpdated}
-          countdown={countdown}
           intervalSeconds={intervalSeconds}
           onRefresh={() => query.refetch()}
         />

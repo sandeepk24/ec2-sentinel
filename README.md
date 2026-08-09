@@ -213,7 +213,7 @@ The dashboard is a **dynamic SPA** (not a static snapshot):
 | Icons | Lucide |
 | State | Zustand (client-side metric history) |
 
-It auto-refreshes, shows a countdown to the next poll, and supports manual refresh.
+It auto-refreshes every 5 minutes (configurable) and supports manual refresh.
 No Node required at runtime — built assets live in `reporters/web/dist/`.
 
 **Develop the UI locally:**
@@ -286,7 +286,7 @@ EC2 Sentinel uses a single YAML config file. Here's the philosophy: **monitor wh
 ```yaml
 # config.yaml — tell Sentinel what to watch
 sentinel:
-  interval_seconds: 60          # how often to scan
+  interval_seconds: 300          # how often to scan (5 minutes)
   hostname_override: "build-server-01"  # friendly name
 
 thresholds:
