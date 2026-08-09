@@ -33,14 +33,10 @@ export function GaugeCard({
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay, duration: 0.4 }}
-      className={cn(
-        "group relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] p-5",
-        "backdrop-blur-xl transition hover:border-white/20 hover:bg-white/[0.06]",
-        accent,
-      )}
+      className={cn("group dash-gauge", accent)}
     >
-      <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-gradient-to-br from-white/10 to-transparent blur-2xl" />
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-200/60">
+      <div className="absolute -right-6 -top-6 h-28 w-28 rounded-full bg-gradient-to-br from-indigo-200/40 via-violet-200/20 to-transparent blur-2xl dark:from-white/10 dark:to-transparent" />
+      <p className="dash-heading">
         {label}
       </p>
 
@@ -53,7 +49,7 @@ export function GaugeCard({
                 cy="50"
                 r="42"
                 fill="none"
-                stroke="rgba(255,255,255,0.06)"
+                stroke="rgba(99,102,241,0.18)"
                 strokeWidth="8"
               />
               <motion.circle
@@ -72,9 +68,9 @@ export function GaugeCard({
               />
               <defs>
                 <linearGradient id="gaugeGrad" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stopColor="#22d3ee" />
-                  <stop offset="50%" stopColor="#a78bfa" />
-                  <stop offset="100%" stopColor="#e879f9" />
+                  <stop offset="0%" stopColor="#0d9488" />
+                  <stop offset="50%" stopColor="#4f46e5" />
+                  <stop offset="100%" stopColor="#9333ea" />
                 </linearGradient>
               </defs>
             </svg>
@@ -86,8 +82,8 @@ export function GaugeCard({
           </div>
         )}
         <div className="min-w-0">
-          <p className="font-mono text-3xl font-bold tracking-tight text-white">{value}</p>
-          <p className="mt-2 text-sm leading-snug text-slate-400">{sub}</p>
+          <p className="font-mono text-3xl font-bold tracking-tight text-slate-900 dark:text-white">{value}</p>
+          <p className="mt-2 text-sm leading-snug text-slate-600 dark:text-slate-400">{sub}</p>
         </div>
       </div>
     </motion.div>

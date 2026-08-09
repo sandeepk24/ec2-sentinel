@@ -30,7 +30,7 @@ function ProgressBar({
   const level = levelForPercent(pct, warn, crit);
   const styles = levelStyles[level];
   return (
-    <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-white/5 ring-1 ring-white/10">
+    <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-indigo-100 ring-1 ring-indigo-200/60 dark:bg-white/5 dark:ring-white/10">
       <div
         className={`h-full rounded-full bg-gradient-to-r ${styles.bar} shadow-lg ${styles.glow} transition-all duration-700 ease-out`}
         style={{ width: `${Math.min(pct, 100)}%` }}
@@ -47,10 +47,10 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
 
   const badgeClass =
     verdict === "critical"
-      ? "bg-rose-500/20 text-rose-100 ring-rose-400/40"
+      ? "bg-rose-50 text-rose-900 ring-rose-200 dark:bg-rose-500/20 dark:text-rose-100 dark:ring-rose-400/40"
       : verdict === "warning"
-        ? "bg-amber-500/20 text-amber-100 ring-amber-400/40"
-        : "bg-emerald-500/20 text-emerald-200 ring-emerald-400/40";
+        ? "bg-amber-50 text-amber-900 ring-amber-200 dark:bg-amber-500/20 dark:text-amber-100 dark:ring-amber-400/40"
+        : "bg-emerald-50 text-emerald-800 ring-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-200 dark:ring-emerald-400/40";
 
   const visibleDisks = r.disks.filter(
     (d) => d.mount === "/" || d.mount.startsWith("/boot") || d.used_percent > 0,
@@ -62,8 +62,8 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
       animate={{ opacity: 1, y: 0 }}
       className="space-y-5"
     >
-      <div className="flex flex-wrap items-center gap-3 border-b border-white/10 pb-4">
-        <h2 className="bg-gradient-to-r from-cyan-300 via-violet-300 to-fuchsia-300 bg-clip-text text-xl font-bold text-transparent">
+      <div className="flex flex-wrap items-center gap-3 border-b border-indigo-100/80 pb-4 dark:border-white/10">
+        <h2 className="font-display text-xl font-bold dash-gradient-text">
           {h.hostname || "unknown"}
         </h2>
         <span
@@ -72,7 +72,7 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
           {verdict === "ok" ? "All clear" : verdict}
         </span>
         {isLive && (
-          <span className="flex items-center gap-1.5 text-sm text-emerald-300">
+          <span className="flex items-center gap-1.5 text-sm font-semibold text-emerald-700 dark:text-emerald-300">
             <span className="relative flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
@@ -81,9 +81,9 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
           </span>
         )}
         {!isLive && host.filename && (
-          <span className="text-sm text-slate-500">{host.filename}</span>
+          <span className="text-sm dash-subtle">{host.filename}</span>
         )}
-        <span className="text-sm text-slate-500">
+        <span className="text-sm dash-subtle">
           {h.instance_id} · {h.instance_type} · {h.region}
         </span>
       </div>
@@ -121,16 +121,16 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
       </div>
 
       {visibleDisks.length > 0 && (
-        <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl">
-          <div className="border-b border-white/10 px-5 py-3">
-            <h3 className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-200/60">
+        <div className="dash-panel overflow-hidden">
+          <div className="dash-panel-header">
+            <h3 className="dash-heading">
               Disk
             </h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-xs uppercase tracking-wider text-slate-500">
+                <tr className="text-left text-xs uppercase tracking-wider dash-subtle">
                   <th className="px-5 py-3 font-semibold">Mount</th>
                   <th className="px-5 py-3 font-semibold">Used</th>
                   <th className="px-5 py-3 font-semibold min-w-[180px]">Usage</th>
@@ -147,9 +147,9 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
                   return (
                     <tr
                       key={d.mount}
-                      className="border-t border-white/5 hover:bg-white/[0.02]"
+                      className="dash-row-hover"
                     >
-                      <td className="px-5 py-3 font-mono text-cyan-200/90">
+                      <td className="px-5 py-3 font-mono font-semibold text-teal-800 dark:text-cyan-200/90">
                         {d.mount}
                       </td>
                       <td
@@ -164,7 +164,7 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
                           crit={t.disk_crit ?? 90}
                         />
                       </td>
-                      <td className="px-5 py-3 text-slate-400">
+                      <td className="px-5 py-3 dash-muted">
                         {fmtBytes(d.total_bytes - d.used_bytes)}
                         {d.days_until_full != null && (
                           <span className="ml-2 text-amber-300/80">
@@ -210,46 +210,46 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
       {r.docker?.available && (
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-4">
-            <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4 backdrop-blur-xl">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300/70">
+            <div className="dash-stat-card border-cyan-200/80 bg-gradient-to-br from-cyan-50 to-white dark:border-cyan-500/20 dark:from-cyan-500/5 dark:to-transparent">
+              <p className="dash-heading text-cyan-700 dark:text-cyan-300/70">
                 Docker
               </p>
-              <p className="mt-2 font-mono text-lg font-bold text-cyan-200">
+              <p className="mt-2 font-mono text-lg font-bold text-cyan-900 dark:text-cyan-200">
                 v{r.docker.server_version}
               </p>
             </div>
-            <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 backdrop-blur-xl">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300/70">
+            <div className="dash-stat-card border-emerald-200/80 bg-gradient-to-br from-emerald-50 to-white dark:border-emerald-500/20 dark:from-emerald-500/5 dark:to-transparent">
+              <p className="dash-heading text-emerald-700 dark:text-emerald-300/70">
                 Containers
               </p>
-              <p className="mt-2 font-mono text-2xl font-bold text-white">
+              <p className="mt-2 font-mono text-2xl font-bold dash-title">
                 {r.docker.running_count}
-                <span className="ml-1 text-base font-normal text-slate-500">
+                <span className="ml-1 text-base font-normal dash-subtle">
                   / {r.docker.running_count + r.docker.stopped_count} running
                 </span>
               </p>
               {r.docker.stopped_count > 0 && (
-                <p className="mt-1 text-sm text-amber-300">
+                <p className="mt-1 text-sm font-medium text-amber-800 dark:text-amber-300">
                   {r.docker.stopped_count} stopped
                 </p>
               )}
             </div>
-            <div className="rounded-2xl border border-violet-500/20 bg-violet-500/5 p-4 backdrop-blur-xl">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-300/70">
+            <div className="dash-stat-card border-violet-200/80 bg-gradient-to-br from-violet-50 to-white dark:border-violet-500/20 dark:from-violet-500/5 dark:to-transparent">
+              <p className="dash-heading text-violet-700 dark:text-violet-300/70">
                 Images
               </p>
-              <p className="mt-2 font-mono text-2xl font-bold text-white">
+              <p className="mt-2 font-mono text-2xl font-bold dash-title">
                 {r.docker.image_count}
               </p>
             </div>
-            <div className="rounded-2xl border border-fuchsia-500/20 bg-fuchsia-500/5 p-4 backdrop-blur-xl">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-fuchsia-300/70">
+            <div className="dash-stat-card border-fuchsia-200/80 bg-gradient-to-br from-fuchsia-50 to-white dark:border-fuchsia-500/20 dark:from-fuchsia-500/5 dark:to-transparent">
+              <p className="dash-heading text-fuchsia-700 dark:text-fuchsia-300/70">
                 Reclaimable
               </p>
-              <p className="mt-2 font-mono text-lg font-bold text-fuchsia-200">
+              <p className="mt-2 font-mono text-lg font-bold text-fuchsia-900 dark:text-fuchsia-200">
                 {r.docker.disk.images_reclaimable}
               </p>
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="mt-1 text-xs dash-subtle">
                 images {r.docker.disk.images_size}
               </p>
             </div>
@@ -322,16 +322,16 @@ function DataTable({
   rowClass?: (rowIdx: number) => { stateCol?: string };
 }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl">
-      <div className="border-b border-white/10 px-5 py-3">
-        <h3 className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-200/60">
+    <div className="dash-panel overflow-hidden">
+      <div className="dash-panel-header">
+        <h3 className="dash-heading">
           {title}
         </h3>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-xs uppercase tracking-wider text-slate-500">
+            <tr className="text-left text-xs uppercase tracking-wider dash-subtle">
               {headers.map((h) => (
                 <th key={h} className="px-5 py-3 font-semibold">
                   {h}
@@ -344,7 +344,7 @@ function DataTable({
               <tr>
                 <td
                   colSpan={headers.length}
-                  className="px-5 py-6 text-center text-slate-500"
+                  className="px-5 py-6 text-center dash-subtle"
                 >
                   None configured
                 </td>
@@ -353,7 +353,7 @@ function DataTable({
               rows.map((row, i) => (
                 <tr
                   key={i}
-                  className="border-t border-white/5 hover:bg-white/[0.02]"
+                  className="dash-row-hover"
                 >
                   {row.map((cell, j) => {
                     const extra = rowClass?.(i);
@@ -361,10 +361,10 @@ function DataTable({
                       j === statusCol
                         ? (extra?.stateCol || statusColor(cell)) + " font-semibold"
                         : j === warnCol && cell !== "0"
-                          ? "text-amber-300 font-semibold"
+                          ? "text-amber-700 font-semibold dark:text-amber-300"
                           : j === 0
-                            ? "font-medium text-slate-200"
-                            : "text-slate-400";
+                            ? "font-semibold text-slate-800 dark:text-slate-200"
+                            : "dash-muted";
                     return (
                       <td key={j} className={`px-5 py-3 ${cls}`}>
                         {cell}
@@ -383,8 +383,8 @@ function DataTable({
 
 function AlertList({ alerts }: { alerts: Alert[] }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 backdrop-blur-xl">
-      <h3 className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-violet-200/60">
+    <div className="dash-panel p-5">
+      <h3 className="mb-4 dash-heading">
         Active alerts
       </h3>
       <ul className="space-y-3">
@@ -393,12 +393,12 @@ function AlertList({ alerts }: { alerts: Alert[] }) {
             key={i}
             className={`rounded-xl border-l-4 px-4 py-3 ${
               a.severity === "critical"
-                ? "border-rose-500 bg-rose-500/10"
-                : "border-amber-400 bg-amber-500/10"
+                ? "border-rose-500 bg-gradient-to-r from-rose-50 to-white dark:from-rose-500/10 dark:to-transparent"
+                : "border-amber-500 bg-gradient-to-r from-amber-50 to-white dark:from-amber-500/10 dark:to-transparent"
             }`}
           >
-            <p className="font-semibold text-white">{a.title}</p>
-            <p className="mt-1 whitespace-pre-line text-sm text-slate-300">
+            <p className="font-semibold dash-title">{a.title}</p>
+            <p className="mt-1 whitespace-pre-line text-sm text-slate-700 dark:text-slate-300">
               {a.message}
             </p>
           </li>

@@ -55,12 +55,24 @@ export default function App() {
 
   return (
     <div className="relative min-h-screen overflow-x-hidden">
-      <div className="pointer-events-none fixed inset-0 bg-[#070b14]" />
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(99,102,241,0.28)_0%,_transparent_50%)]" />
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_bottom_right,_rgba(236,72,153,0.16)_0%,_transparent_45%)]" />
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_bottom_left,_rgba(34,211,238,0.12)_0%,_transparent_40%)]" />
+      {/* Light: pearl mesh · Dark: deep space */}
+      <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(165deg,#f8faff_0%,#f3f0ff_38%,#eef8ff_100%)] dark:bg-[#070b14]" />
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_15%_-5%,rgba(99,102,241,0.22)_0%,transparent_52%)] dark:bg-[radial-gradient(ellipse_at_top,_rgba(99,102,241,0.28)_0%,_transparent_50%)]" />
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_85%_0%,rgba(14,165,233,0.16)_0%,transparent_45%)] dark:bg-[radial-gradient(ellipse_at_bottom_right,_rgba(236,72,153,0.16)_0%,_transparent_45%)]" />
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_50%_100%,rgba(168,85,247,0.14)_0%,transparent_50%)] dark:bg-[radial-gradient(ellipse_at_bottom_left,_rgba(34,211,238,0.12)_0%,_transparent_40%)]" />
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_100%_80%,rgba(244,114,182,0.1)_0%,transparent_40%)] dark:hidden" />
+      {/* Light grid */}
       <div
-        className="pointer-events-none fixed inset-0 opacity-[0.035]"
+        className="pointer-events-none fixed inset-0 opacity-[0.35] dark:hidden"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(79,70,229,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(79,70,229,0.06) 1px, transparent 1px)",
+          backgroundSize: "56px 56px",
+        }}
+      />
+      {/* Dark grid */}
+      <div
+        className="pointer-events-none fixed inset-0 hidden opacity-[0.035] dark:block"
         style={{
           backgroundImage:
             "linear-gradient(rgba(255,255,255,.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.6) 1px, transparent 1px)",
@@ -87,11 +99,13 @@ export default function App() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="flex flex-col items-center justify-center py-32 text-slate-400"
+              className="flex flex-col items-center justify-center py-32 dash-muted"
             >
-              <Loader2 className="mb-4 h-10 w-10 animate-spin text-violet-400" />
-              <p className="text-lg">Collecting live health data…</p>
-              <p className="mt-1 text-sm text-slate-500">
+              <Loader2 className="mb-4 h-10 w-10 animate-spin text-indigo-500 dark:text-violet-400" />
+              <p className="font-display text-lg font-semibold text-slate-800 dark:text-slate-300">
+                Collecting live health data…
+              </p>
+              <p className="mt-1 text-sm dash-subtle">
                 Sampling CPU, memory, top consumers, and diagnosis
               </p>
             </motion.div>
@@ -102,18 +116,18 @@ export default function App() {
               key="error"
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              className="rounded-2xl border border-rose-500/30 bg-rose-500/10 px-6 py-10 text-center backdrop-blur-xl"
+              className="rounded-2xl border border-rose-200 bg-gradient-to-br from-rose-50 to-white px-6 py-10 text-center shadow-[0_8px_40px_rgba(244,63,94,0.1)] backdrop-blur-xl dark:border-rose-500/30 dark:from-rose-500/10 dark:to-transparent dark:shadow-none"
             >
-              <ServerCrash className="mx-auto mb-3 h-10 w-10 text-rose-300" />
-              <p className="text-lg font-semibold text-rose-200">
+              <ServerCrash className="mx-auto mb-3 h-10 w-10 text-rose-500 dark:text-rose-300" />
+              <p className="text-lg font-semibold text-rose-700 dark:text-rose-200">
                 Failed to load health data
               </p>
-              <p className="mt-2 text-sm text-rose-300/80">
+              <p className="mt-2 text-sm text-rose-600 dark:text-rose-300/80">
                 {(query.error as Error)?.message}
               </p>
-              <p className="mt-4 text-sm text-slate-400">
+              <p className="mt-4 text-sm dash-muted">
                 Run{" "}
-                <code className="rounded bg-black/30 px-2 py-0.5 font-mono text-cyan-300">
+                <code className="rounded-md bg-indigo-50 px-2 py-0.5 font-mono text-indigo-700 ring-1 ring-indigo-100 dark:bg-black/30 dark:text-cyan-300 dark:ring-0">
                   python sentinel.py --web
                 </code>{" "}
                 on this host.
@@ -129,7 +143,7 @@ export default function App() {
               className="space-y-8"
             >
               {query.isError && (
-                <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-100">
+                <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50/80 px-4 py-2 text-sm text-amber-950 shadow-sm dark:border-amber-500/30 dark:from-amber-500/10 dark:to-transparent dark:text-amber-100 dark:shadow-none">
                   <AlertTriangle className="h-4 w-4" />
                   Last refresh failed — showing cached data
                 </div>
@@ -147,7 +161,7 @@ export default function App() {
 
               {query.data.fleet.length > 0 && (
                 <div>
-                  <h2 className="mb-6 text-sm font-semibold uppercase tracking-[0.25em] text-violet-300/50">
+                  <h2 className="mb-6 font-display text-sm font-bold uppercase tracking-[0.25em] text-indigo-600/70 dark:text-violet-300/50">
                     Fleet reports ({query.data.fleet.length})
                   </h2>
                   <div className="space-y-12">
@@ -165,9 +179,9 @@ export default function App() {
           )}
         </AnimatePresence>
 
-        <footer className="mt-16 border-t border-white/10 pt-6 text-center text-xs text-slate-500">
+        <footer className="mt-16 border-t border-indigo-100/80 pt-6 text-center text-xs dash-subtle dark:border-white/10">
           Dynamic SPA · React + TanStack Query + Recharts · polls{" "}
-          <code className="text-violet-300/70">/api/health</code> every{" "}
+          <code className="rounded bg-indigo-50 px-1.5 py-0.5 font-mono text-indigo-700 dark:bg-transparent dark:text-violet-300/70">/api/health</code> every{" "}
           {intervalSeconds}s
         </footer>
       </div>
