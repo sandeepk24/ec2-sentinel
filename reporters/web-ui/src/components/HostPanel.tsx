@@ -1,3 +1,4 @@
+import { motion } from "framer-motion";
 import {
   fmtBytes,
   fmtTime,
@@ -9,6 +10,7 @@ import {
 } from "../utils";
 import type { Alert, HostPayload } from "../types";
 import { DiagnosisPanel } from "./DiagnosisPanel";
+import { GaugeCard } from "./GaugeCard";
 
 interface Props {
   host: HostPayload;
@@ -37,42 +39,6 @@ function ProgressBar({
   );
 }
 
-function MetricCard({
-  label,
-  value,
-  sub,
-  pct,
-  warn,
-  crit,
-  accent,
-}: {
-  label: string;
-  value: string;
-  sub: string;
-  pct?: number;
-  warn?: number;
-  crit?: number;
-  accent: string;
-}) {
-  return (
-    <div
-      className={`group relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] p-5 backdrop-blur-xl transition hover:border-white/20 hover:bg-white/[0.06] ${accent}`}
-    >
-      <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-gradient-to-br from-white/10 to-transparent blur-2xl" />
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-200/60">
-        {label}
-      </p>
-      <p className="mt-2 font-mono text-4xl font-bold tracking-tight text-white">
-        {value}
-      </p>
-      {pct != null && warn != null && crit != null && (
-        <ProgressBar pct={pct} warn={warn} crit={crit} />
-      )}
-      <p className="mt-3 text-sm text-slate-400">{sub}</p>
-    </div>
-  );
-}
-
 export function HostPanel({ host, thresholds, isLive }: Props) {
   const r = host.report;
   const h = r.host;
@@ -91,7 +57,11 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
   );
 
   return (
-    <section className="space-y-5">
+    <motion.section
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="space-y-5"
+    >
       <div className="flex flex-wrap items-center gap-3 border-b border-white/10 pb-4">
         <h2 className="bg-gradient-to-r from-cyan-300 via-violet-300 to-fuchsia-300 bg-clip-text text-xl font-bold text-transparent">
           {h.hostname || "unknown"}
@@ -121,7 +91,7 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
       <DiagnosisPanel report={r} />
 
       <div className="grid gap-4 md:grid-cols-3">
-        <MetricCard
+        <GaugeCard
           label="CPU"
           value={`${r.cpu.usage_percent}%`}
           sub={`Load ${r.cpu.load_avg[0]?.toFixed(2) ?? "—"} · ${r.cpu.cores} cores · user ${r.cpu.user_percent ?? 0}% / iowait ${r.cpu.iowait_percent ?? 0}% / steal ${r.cpu.steal_percent}%`}
@@ -129,8 +99,9 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
           warn={t.cpu_warn ?? 80}
           crit={t.cpu_crit ?? 95}
           accent="hover:shadow-cyan-500/10"
+          delay={0.05}
         />
-        <MetricCard
+        <GaugeCard
           label="Memory"
           value={`${r.memory.used_percent}%`}
           sub={`${fmtBytes(r.memory.available_bytes ?? r.memory.total_bytes - r.memory.used_bytes)} available · apps ~${fmtBytes(r.memory.app_bytes)} · swap ${r.memory.swap_used_percent}%`}
@@ -138,12 +109,14 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
           warn={t.memory_warn ?? 80}
           crit={t.memory_crit ?? 95}
           accent="hover:shadow-violet-500/10"
+          delay={0.1}
         />
-        <MetricCard
+        <GaugeCard
           label="Uptime"
           value={fmtUptime(h.uptime_seconds)}
           sub={`Scanned ${fmtTime(r.timestamp)}`}
           accent="hover:shadow-fuchsia-500/10"
+          delay={0.15}
         />
       </div>
 
@@ -329,7 +302,7 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
       {host.alerts && host.alerts.length > 0 && (
         <AlertList alerts={host.alerts} />
       )}
-    </section>
+    </motion.section>
   );
 }
 

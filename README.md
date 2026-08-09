@@ -178,9 +178,19 @@ python sentinel.py --daemon
 python sentinel.py --web
 ```
 
-The dashboard is a **React + Vite** app with rich gradients, Outfit & JetBrains Mono fonts,
-and animated metric bars. It auto-refreshes and works offline on the instance — no Node
-required at runtime (built assets live in `reporters/web/dist/`).
+The dashboard is a **dynamic SPA** (not a static snapshot):
+
+| Layer | Stack |
+|-------|--------|
+| UI | React 19 + TypeScript + Vite 6 + Tailwind CSS 4 |
+| Data | TanStack Query (live polling of `/api/health`) |
+| Charts | Recharts (CPU/memory history while the page is open) |
+| Motion | Framer Motion |
+| Icons | Lucide |
+| State | Zustand (client-side metric history) |
+
+It auto-refreshes, shows a countdown to the next poll, and supports manual refresh.
+No Node required at runtime — built assets live in `reporters/web/dist/`.
 
 **Develop the UI locally:**
 

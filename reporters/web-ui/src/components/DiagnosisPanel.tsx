@@ -1,3 +1,5 @@
+import { motion } from "framer-motion";
+import { MessageCircle, Cpu, MemoryStick } from "lucide-react";
 import type { Diagnosis, Report, TopProcess } from "../types";
 import { fmtBytes } from "../utils";
 
@@ -94,7 +96,9 @@ export function DiagnosisPanel({ report }: { report: Report }) {
   return (
     <div className="space-y-5">
       {/* Hero diagnosis */}
-      <div
+      <motion.div
+        initial={{ opacity: 0, scale: 0.98 }}
+        animate={{ opacity: 1, scale: 1 }}
         className={`relative overflow-hidden rounded-3xl border bg-gradient-to-br p-6 backdrop-blur-xl ${healthStyle}`}
       >
         <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/5 blur-3xl" />
@@ -116,12 +120,13 @@ export function DiagnosisPanel({ report }: { report: Report }) {
             {d.summary}
           </p>
         </div>
-      </div>
+      </motion.div>
 
       {/* Talk track */}
       {d.talk_track.length > 0 && (
         <div className="rounded-2xl border border-violet-500/20 bg-violet-500/5 p-5">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-violet-300/80">
+          <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-violet-300/80">
+            <MessageCircle className="h-3.5 w-3.5" />
             Say this on the call
           </h3>
           <ol className="space-y-3">
@@ -140,7 +145,8 @@ export function DiagnosisPanel({ report }: { report: Report }) {
       {/* Where CPU / Memory goes */}
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 backdrop-blur-xl">
-          <h3 className="mb-1 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300/70">
+          <h3 className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300/70">
+            <Cpu className="h-3.5 w-3.5" />
             Where is the CPU going?
           </h3>
           <p className="mb-4 text-sm text-slate-400">{d.cpu_story}</p>
@@ -164,7 +170,8 @@ export function DiagnosisPanel({ report }: { report: Report }) {
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 backdrop-blur-xl">
-          <h3 className="mb-1 text-xs font-semibold uppercase tracking-[0.2em] text-fuchsia-300/70">
+          <h3 className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-fuchsia-300/70">
+            <MemoryStick className="h-3.5 w-3.5" />
             Where is the memory going?
           </h3>
           <p className="mb-4 text-sm text-slate-400">{d.memory_story}</p>

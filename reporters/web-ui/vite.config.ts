@@ -8,6 +8,16 @@ export default defineConfig({
   build: {
     outDir: "../web/dist",
     emptyOutDir: true,
+    chunkSizeWarningLimit: 900,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          charts: ["recharts"],
+          motion: ["framer-motion"],
+          query: ["@tanstack/react-query"],
+        },
+      },
+    },
   },
   server: {
     port: 5173,
