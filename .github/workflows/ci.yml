@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
@@ -67,7 +71,7 @@ jobs:
         run: |
           python -c "
           from collectors.ports import collect_ports
-          report = collect_ports([{'name': 'test', 'port': 99999}])
+          report = collect_ports([{'name': 'test', 'port': 59999}])
           assert len(report.checks) == 1
           assert not report.checks[0].is_open
           print('Port check works')

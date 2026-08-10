@@ -46,6 +46,9 @@ def check_port(
     """
     import time
 
+    if not (1 <= port <= 65535):
+        return False, 0.0
+
     start = time.monotonic()
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
