@@ -25,26 +25,55 @@ Runs locally on the instance. No AWS API keys. No central server required.
 
 ---
 
-## Quick start
+## Minimum requirements
+
+| | |
+|---|---|
+| **OS** | Linux on EC2 — Amazon Linux 2/2023, Ubuntu 20.04+, RHEL 8+ |
+| **Python** | 3.9+ with `pip` |
+| **Dependencies** | One package: `PyYAML` (everything else is Python stdlib + `/proc`) |
+| **AWS / IAM** | None — no API keys, no boto3, no CloudWatch agent |
+| **Root** | Not required to run scans; `sudo` only if you install to `/opt` or use systemd |
+| **Disk / RAM** | Negligible — no database, no heavy agents |
+
+**Optional:** Docker CLI (for container checks), read access to log paths in your config, outbound HTTPS (for Slack/PagerDuty alerts).
+
+**No Python?** Bash-only quick check — no install:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/sandeepk24/ec2-sentinel/main/install.sh | bash
-cd ec2-sentinel
-python sentinel.py --once          # one-shot report
-python sentinel.py --web           # browser dashboard → http://127.0.0.1:8765
-python sentinel.py --watch         # live terminal view
-python sentinel.py --daemon        # background + alerting
+curl -sSL https://raw.githubusercontent.com/sandeepk24/ec2-sentinel/main/scripts/quick-check.sh | bash
 ```
 
-Or clone and install manually:
+---
+
+## Install
+
+**One command on the EC2 instance:**
 
 ```bash
-git clone https://github.com/sandeepk24/ec2-sentinel.git
-cd ec2-sentinel
-pip install -r requirements.txt
-cp config.example.yaml config.yaml   # edit for your services
-python sentinel.py --once
+curl -sSL https://raw.githubusercontent.com/sandeepk24/ec2-sentinel/main/install.sh | sudo bash
 ```
+
+Installs to `/opt/ec2-sentinel`, adds the `ec2-sentinel` command, and creates `config.yaml`.
+
+**Run it:**
+
+```bash
+sudo ec2-sentinel --once          # health report in the terminal
+sudo ec2-sentinel --web           # dashboard → http://127.0.0.1:8765
+sudo ec2-sentinel --daemon        # background monitoring + alerts
+```
+
+Edit `/opt/ec2-sentinel/config.yaml` for your Jenkins, Bamboo, Tomcat, etc.
+
+**Run as a service (optional):**
+
+```bash
+curl -sSL https://raw.githubusercontent.com/sandeepk24/ec2-sentinel/main/install.sh | sudo bash -s -- --systemd
+sudo systemctl status ec2-sentinel
+```
+
+Without `sudo`, the installer uses `~/.ec2-sentinel` instead of `/opt/ec2-sentinel`.
 
 ---
 
@@ -110,32 +139,11 @@ EC2 Sentinel is an **on-instance agent**. Install it on each EC2 you want to wat
   install on instance  →  scan CPU / mem / disk / processes / ports / logs  →  terminal, web UI, or alert
 ```
 
-**Monitor multiple instances:** run `--once --json` on each box (cron works well), sync the JSON files to one host, then:
+**Monitor multiple instances:** run `ec2-sentinel --once --json` on each box (cron works well), sync the JSON files to one host, then:
 
 ```bash
-python sentinel.py --web --reports-dir /path/to/fleet-json/
+ec2-sentinel --web --reports-dir /path/to/fleet-json/
 ```
-
-**Run as a service:**
-
-```bash
-sudo ./install.sh --systemd
-sudo systemctl status ec2-sentinel
-```
-
-**No Python yet?** Use the bash quick check:
-
-```bash
-curl -sSL https://raw.githubusercontent.com/sandeepk24/ec2-sentinel/main/scripts/quick-check.sh | bash
-```
-
----
-
-## Requirements
-
-- Python 3.9+ (full agent) · Linux (Amazon Linux, Ubuntu, RHEL)
-- Bash 4+ for `scripts/quick-check.sh`
-- No root required for monitoring (root needed for systemd install)
 
 ---
 
