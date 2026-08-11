@@ -1,8 +1,11 @@
 """
 Top resource consumers — answers "where is the CPU/memory going?"
 
-Samples /proc for ~1s to get real CPU%, ranks by RSS for memory.
-No psutil.
+Watches every running process for about a second, then lists the biggest CPU
+and memory hogs — like `top`, but trimmed to the top offenders so you can see
+which service (Jenkins, Java, Tomcat, etc.) is actually eating the box.
+
+Samples /proc directly — no psutil.
 """
 
 import os

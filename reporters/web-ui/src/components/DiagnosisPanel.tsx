@@ -143,6 +143,11 @@ export function DiagnosisPanel({ report }: { report: Report }) {
       )}
 
       {/* Where CPU / Memory goes */}
+      <p className="text-sm dash-muted">
+        Watches every running process for about a second, then lists the biggest CPU and
+        memory hogs — like <code className="rounded bg-indigo-50 px-1 font-mono text-xs text-indigo-700 dark:bg-white/10 dark:text-violet-200">top</code>
+        , but trimmed to the top offenders so you can see which service is eating the box.
+      </p>
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="dash-panel p-5">
           <h3 className="mb-1 flex items-center gap-2 dash-heading text-cyan-700 dark:text-cyan-300/70">
@@ -160,6 +165,12 @@ export function DiagnosisPanel({ report }: { report: Report }) {
             ]}
           />
           <div className="mt-4 border-t border-slate-200 pt-3 dark:border-white/5">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider dash-subtle">
+              Top CPU processes
+              {top?.sample_seconds != null && (
+                <span className="font-normal normal-case"> · sampled {top.sample_seconds}s</span>
+              )}
+            </p>
             {(top?.by_cpu ?? []).slice(0, 6).map((p) => (
               <ConsumerRow key={`cpu-${p.pid}`} p={p} mode="cpu" />
             ))}
@@ -212,6 +223,12 @@ export function DiagnosisPanel({ report }: { report: Report }) {
             {mem.swap_used_percent}%
           </p>
           <div className="mt-4 border-t border-slate-200 pt-3 dark:border-white/5">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider dash-subtle">
+              Top memory processes
+              {top?.sample_seconds != null && (
+                <span className="font-normal normal-case"> · sampled {top.sample_seconds}s</span>
+              )}
+            </p>
             {(top?.by_memory ?? []).slice(0, 6).map((p) => (
               <ConsumerRow key={`mem-${p.pid}`} p={p} mode="mem" />
             ))}
