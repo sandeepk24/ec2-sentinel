@@ -15,13 +15,23 @@ EC2 Sentinel runs on the instance and gives you that answer in one place. Less t
 ## What you get
 
 - **CPU, memory, disk, swap** — usage, load, and what's consuming resources
+- **Top offenders** — ranks the biggest CPU and memory hogs (~1s sample, like `top`)
 - **Processes** — is Jenkins / Bamboo / Tomcat / JBoss actually running? Did it restart?
+- **Java / JVM** — installed JDK/JRE versions plus running Java processes (like `ps -ef | grep java`)
 - **Ports** — is the service listening on the port you expect?
 - **Logs** — scans for OOM, disk full, CRITICAL/FATAL patterns
 - **Plain-English diagnosis** — a short "why is this slow?" summary for the team
 - **Alerts** — Slack, email, PagerDuty, or JSON to stdout
 
 Runs locally on the instance. No AWS API keys. No central server required.
+
+---
+
+## What's new
+
+- **Running Java processes** — lists every JVM on the box (PID, binary, command line), like `ps -ef | grep java`, even when no JDK is installed
+- **Top CPU/memory panel** — dashboard shows which processes are eating the instance, with a plain-English explanation
+- **5-minute refresh** — dashboard polls every 5 minutes; older configs using 30/60s intervals upgrade to 5 minutes on load
 
 ---
 
@@ -111,6 +121,10 @@ processes:
   - name: tomcat
     match: "org.apache.catalina"
     port: 8080
+
+java:
+  enabled: true
+  track_processes: true          # list running JVMs (ps -ef | grep java)
 
 log_watch:
   patterns:
