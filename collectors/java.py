@@ -1,8 +1,9 @@
 """
-Java / JDK collector: discover installed runtimes and report version numbers.
+Java / JDK collector: discover installed runtimes and running JVM processes.
 
 Finds java binaries on PATH and common install locations, runs `java -version`,
-and optionally detects JDK vs JRE via `javac`.
+detects JDK vs JRE via `javac`, and scans /proc for running JVMs (like
+`ps -ef | grep java`) with PID, binary path, and command line.
 """
 
 import os
@@ -217,8 +218,25 @@ def _proc_exe(pid: int) -> Optional[str]:
     return None
 
 
-def _running_java_processes(installations: list[JavaInstallation]) -> list[JavaProcess]:
-    version_by_path = {_resolve_real(j.path): j.version for j in installations}
+def _looks_like_java_process(cmdline: str, comm: str) -> bool:
+    """True if this process looks like a running JVM (ps -ef | grep java)."""
+    lower = cmdline.lower()
+    if any(x in lower for x in ("grep java", "java-version", "sentinel.py")):
+        return False
+    if comm == "java" or lower.endswith("/java"):
+        return True
+    if re.search(r"(?:^|\s)(?:/[\w./+-]+/)?java(?:\s|$)", cmdline):
+        return True
+    return " java " in f" {lower} "
+
+
+def _running_java_processes(
+    installations: Optional[list[JavaInstallation]] = None,
+    max_processes: int = 20,
+) -> list[JavaProcess]:
+    version_by_path = {
+        _resolve_real(j.path): j.version for j in (installations or [])
+    }
     results: list[JavaProcess] = []
 
     proc_root = Path("/proc")
@@ -240,25 +258,22 @@ def _running_java_processes(installations: list[JavaInstallation]) -> list[JavaP
             continue
         if not cmdline:
             continue
-        lower = cmdline.lower()
-        if "java" not in lower and not lower.endswith("/java"):
-            continue
-        # Skip obvious non-JVM helpers
-        if any(x in lower for x in ("grep java", "java-version", "sentinel.py")):
+        comm = _proc_name(pid)
+        if not _looks_like_java_process(cmdline, comm):
             continue
 
         exe = _proc_exe(pid)
         version = version_by_path.get(_resolve_real(exe)) if exe else None
         results.append(JavaProcess(
             pid=pid,
-            name=_proc_name(pid),
+            name=comm,
             java_path=exe,
             version=version,
             cmdline=cmdline[:200],
         ))
 
     results.sort(key=lambda p: p.pid)
-    return results[:20]
+    return results[:max_processes]
 
 
 def collect_java(java_config: Optional[dict] = None) -> JavaReport:
@@ -267,6 +282,7 @@ def collect_java(java_config: Optional[dict] = None) -> JavaReport:
 
     Config keys:
         enabled: bool (default True)
+        track_processes: bool (default True) — scan /proc for JVMs (like ps -ef | grep java)
         search_paths: extra directories to scan for java binaries
     """
     cfg = java_config or {}
@@ -274,6 +290,8 @@ def collect_java(java_config: Optional[dict] = None) -> JavaReport:
 
     if cfg.get("enabled") is False:
         return JavaReport(timestamp=ts, enabled=False, available=False, error="disabled in config")
+
+    track_processes = cfg.get("track_processes", True)
 
     search_paths = list(DEFAULT_SEARCH_PATHS)
     search_paths.extend(cfg.get("search_paths") or [])
@@ -298,21 +316,28 @@ def collect_java(java_config: Optional[dict] = None) -> JavaReport:
 
     installations.sort(key=lambda j: (j.vendor, j.version, j.path))
 
-    if not installations:
+    processes = _running_java_processes(installations) if track_processes else []
+
+    if not installations and not processes:
         return JavaReport(
             timestamp=ts,
             enabled=True,
             available=False,
-            error="no Java runtime found",
+            error="no Java runtime or running JVM found",
             java_home=java_home,
             default_java=default_java,
+            processes=processes,
         )
 
-    processes = _running_java_processes(installations)
+    error = ""
+    if not installations and processes:
+        error = "installed runtimes not detected; showing running JVMs only"
+
     return JavaReport(
         timestamp=ts,
         enabled=True,
         available=True,
+        error=error,
         java_home=java_home,
         default_java=default_java,
         installations=installations,

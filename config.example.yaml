@@ -44,7 +44,8 @@ docker:
 # Java / JDK — discover installed runtimes and version numbers
 # ---------------------------------------------------------------------------
 java:
-  enabled: true                  # set false to skip java -version discovery
+  enabled: true                  # set false to skip Java checks entirely
+  track_processes: true          # scan /proc for JVMs (like ps -ef | grep java)
   search_paths: []               # extra dirs to scan (default: /usr/lib/jvm, /opt, …)
 
 # ---------------------------------------------------------------------------

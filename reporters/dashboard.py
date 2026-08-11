@@ -316,6 +316,15 @@ def render_java(java_report: JavaReport) -> str:
     if not java_report.available:
         if java_report.error == "disabled in config":
             return ""
+        if java_report.processes:
+            lines = [f"\n  {C.BOLD}RUNNING JAVA PROCESSES{C.RESET} (ps -ef | grep java)"]
+            for i, proc in enumerate(java_report.processes[:8]):
+                prefix = "└─" if i == min(len(java_report.processes), 8) - 1 else "├─"
+                cmd = proc.cmdline[:50] + ("…" if len(proc.cmdline) > 50 else "")
+                lines.append(
+                    f"  {prefix} pid {proc.pid} {proc.name} {C.DIM}{cmd}{C.RESET}"
+                )
+            return "\n".join(lines)
         msg = java_report.error or "not found"
         home = f"  JAVA_HOME: {java_report.java_home}" if java_report.java_home else ""
         return f"\n  {C.BOLD}JAVA / JDK{C.RESET}\n  └─ {C.YELLOW}Not detected ({msg}){C.RESET}{home}"
@@ -349,7 +358,10 @@ def render_java(java_report: JavaReport) -> str:
         lines.append(f"  {C.DIM}  … and {len(java_report.installations) - 8} more{C.RESET}")
 
     if java_report.processes:
-        lines.append(f"  ├─ Running JVMs {'.' * 8} {len(java_report.processes)}")
+        lines.append(
+            f"  ├─ Running JVMs {'.' * 8} {len(java_report.processes)} "
+            f"{C.DIM}(ps -ef | grep java){C.RESET}"
+        )
         for i, proc in enumerate(java_report.processes[:5]):
             prefix = "└─" if i == min(len(java_report.processes), 5) - 1 else "├─"
             ver = proc.version or "?"

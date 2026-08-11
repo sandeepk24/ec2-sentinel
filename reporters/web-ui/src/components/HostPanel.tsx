@@ -209,7 +209,7 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
 
       {r.java?.enabled && (
         <div className="space-y-4">
-          {!r.java.available ? (
+          {!r.java.available && r.java.processes.length === 0 ? (
             <div className="dash-panel px-5 py-4">
               <h3 className="dash-heading text-amber-700 dark:text-amber-300/80">Java / JDK</h3>
               <p className="mt-2 text-sm dash-muted">
@@ -223,6 +223,9 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
             </div>
           ) : (
             <>
+              {r.java.error && (
+                <p className="text-sm text-amber-800 dark:text-amber-200/90">{r.java.error}</p>
+              )}
               <div className="grid gap-4 md:grid-cols-3">
                 <div className="dash-stat-card border-amber-200/80 bg-gradient-to-br from-amber-50 to-white dark:border-amber-500/25 dark:from-amber-950/50 dark:to-[#0a1020]">
                   <p className="dash-heading text-amber-700 dark:text-amber-300/70">Runtimes</p>
@@ -241,34 +244,38 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
                   </p>
                 </div>
               </div>
-              <DataTable
-                title="Java installations"
-                headers={["Vendor", "Version", "Type", "Path", "javac"]}
-                rows={r.java.installations.map((j) => [
-                  j.vendor,
-                  j.version,
-                  j.is_jdk ? "JDK" : "JRE",
-                  j.path.length > 48 ? "…" + j.path.slice(-47) : j.path,
-                  j.javac_version ?? "—",
-                ])}
-              />
-              {r.java.processes.length > 0 && (
+              {r.java.installations.length > 0 && (
                 <DataTable
-                  title="Running Java processes"
-                  headers={["PID", "Name", "Java version", "Binary", "Command"]}
-                  rows={r.java.processes.map((p) => [
-                    String(p.pid),
-                    p.name,
-                    p.version ?? "—",
-                    p.java_path
-                      ? p.java_path.length > 32
-                        ? "…" + p.java_path.slice(-31)
-                        : p.java_path
-                      : "—",
-                    p.cmdline.length > 50 ? p.cmdline.slice(0, 50) + "…" : p.cmdline,
+                  title="Java installations"
+                  headers={["Vendor", "Version", "Type", "Path", "javac"]}
+                  rows={r.java.installations.map((j) => [
+                    j.vendor,
+                    j.version,
+                    j.is_jdk ? "JDK" : "JRE",
+                    j.path.length > 48 ? "…" + j.path.slice(-47) : j.path,
+                    j.javac_version ?? "—",
                   ])}
                 />
               )}
+              <DataTable
+                title="Running Java processes (ps -ef | grep java)"
+                headers={["PID", "Name", "Java version", "Binary", "Command"]}
+                rows={
+                  r.java.processes.length > 0
+                    ? r.java.processes.map((p) => [
+                        String(p.pid),
+                        p.name,
+                        p.version ?? "—",
+                        p.java_path
+                          ? p.java_path.length > 32
+                            ? "…" + p.java_path.slice(-31)
+                            : p.java_path
+                          : "—",
+                        p.cmdline.length > 50 ? p.cmdline.slice(0, 50) + "…" : p.cmdline,
+                      ])
+                    : [["—", "—", "—", "—", "No running JVM processes found"]]
+                }
+              />
             </>
           )}
         </div>
