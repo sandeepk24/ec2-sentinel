@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 import { AlertCircle, Cpu, MemoryStick, MessageCircle } from "lucide-react";
 import type { Diagnosis, Report, TopProcess } from "../types";
 import { fmtBytes } from "../utils";
-import { CollapsibleTile } from "./CollapsibleTile";
+import { TileGrid, type TileDefinition } from "./CollapsibleTile";
 
 function StackBar({
   segments,
@@ -102,6 +102,180 @@ export function DiagnosisPanel({ report }: { report: Report }) {
     .filter(Boolean)
     .join(" · ");
 
+  const diagTone: TileDefinition["tone"] =
+    d.health === "critical" ? "crit" : d.health === "degraded" ? "warn" : "neutral";
+
+  const diagTiles: TileDefinition[] = [];
+
+  if (d.talk_track.length > 0) {
+    diagTiles.push({
+      id: "talk",
+      title: "Talk track",
+      summary: `${d.talk_track.length} point${d.talk_track.length === 1 ? "" : "s"}`,
+      icon: MessageCircle,
+      tone: diagTone,
+      content: (
+        <ol className="space-y-3">
+          {d.talk_track.map((line, i) => (
+            <li
+              key={i}
+              className="flex gap-3 text-sm font-medium leading-relaxed text-slate-700 dark:text-slate-200"
+            >
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-100 font-mono text-xs font-bold text-indigo-700 dark:bg-violet-500/30 dark:text-violet-200">
+                {i + 1}
+              </span>
+              <span>{line}</span>
+            </li>
+          ))}
+        </ol>
+      ),
+    });
+  }
+
+  diagTiles.push({
+    id: "breakdown",
+    title: "CPU & memory",
+    summary: breakdownSummary || `CPU ${cpu.usage_percent}% · Mem ${mem.used_percent}%`,
+    icon: Cpu,
+    tone: diagTone,
+    content: (
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div>
+          <h4 className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-cyan-700 dark:text-cyan-300/70">
+            <Cpu className="h-3.5 w-3.5" />
+            CPU breakdown
+          </h4>
+          <p className="mb-3 text-sm dash-muted">{d.cpu_story}</p>
+          <StackBar
+            segments={[
+              { label: "user", pct: cpu.user_percent ?? 0, color: "bg-cyan-400" },
+              { label: "system", pct: cpu.system_percent ?? 0, color: "bg-violet-400" },
+              { label: "iowait", pct: cpu.iowait_percent ?? 0, color: "bg-amber-400" },
+              { label: "steal", pct: cpu.steal_percent ?? 0, color: "bg-rose-400" },
+              { label: "idle", pct: cpu.idle_percent ?? 0, color: "bg-slate-600" },
+            ]}
+          />
+          <div className="mt-4 border-t border-slate-200 pt-3 dark:border-white/5">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider dash-subtle">
+              Top CPU
+              {top?.sample_seconds != null && (
+                <span className="font-normal normal-case"> · {top.sample_seconds}s</span>
+              )}
+            </p>
+            {(top?.by_cpu ?? []).slice(0, 6).map((p) => (
+              <ConsumerRow key={`cpu-${p.pid}`} p={p} mode="cpu" />
+            ))}
+            {!top?.by_cpu?.length && (
+              <p className="text-sm dash-subtle">No significant CPU consumers.</p>
+            )}
+          </div>
+        </div>
+        <div>
+          <h4 className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-fuchsia-700 dark:text-fuchsia-300/70">
+            <MemoryStick className="h-3.5 w-3.5" />
+            Memory breakdown
+          </h4>
+          <p className="mb-3 text-sm dash-muted">{d.memory_story}</p>
+          <StackBar
+            segments={[
+              {
+                label: "apps",
+                pct: mem.total_bytes
+                  ? Math.round(((mem.app_bytes ?? 0) / mem.total_bytes) * 100)
+                  : 0,
+                color: "bg-fuchsia-400",
+              },
+              {
+                label: "cache",
+                pct: mem.total_bytes
+                  ? Math.round(((mem.cached_bytes ?? 0) / mem.total_bytes) * 100)
+                  : 0,
+                color: "bg-sky-400",
+              },
+              {
+                label: "buffers",
+                pct: mem.total_bytes
+                  ? Math.round(((mem.buffers_bytes ?? 0) / mem.total_bytes) * 100)
+                  : 0,
+                color: "bg-teal-400",
+              },
+              {
+                label: "free",
+                pct: mem.total_bytes
+                  ? Math.round(((mem.free_bytes ?? 0) / mem.total_bytes) * 100)
+                  : 0,
+                color: "bg-slate-600",
+              },
+            ]}
+          />
+          <p className="mt-2 text-xs dash-subtle">
+            Available: {fmtBytes(mem.available_bytes)} · Swap: {mem.swap_used_percent}%
+          </p>
+          <div className="mt-4 border-t border-slate-200 pt-3 dark:border-white/5">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider dash-subtle">
+              Top memory
+              {top?.sample_seconds != null && (
+                <span className="font-normal normal-case"> · {top.sample_seconds}s</span>
+              )}
+            </p>
+            {(top?.by_memory ?? []).slice(0, 6).map((p) => (
+              <ConsumerRow key={`mem-${p.pid}`} p={p} mode="mem" />
+            ))}
+            {!top?.by_memory?.length && (
+              <p className="text-sm dash-subtle">No memory consumers.</p>
+            )}
+          </div>
+        </div>
+      </div>
+    ),
+  });
+
+  if (findings.length > 0) {
+    diagTiles.push({
+      id: "findings",
+      title: "Findings",
+      summary: `${findings.length} issue${findings.length === 1 ? "" : "s"}`,
+      icon: AlertCircle,
+      tone: findings.some((f) => f.severity === "critical") ? "crit" : "warn",
+      content: (
+        <div className="space-y-3">
+          {findings.map((f, i) => (
+            <div
+              key={i}
+              className={`rounded-2xl border-l-4 px-4 py-3 sm:px-5 sm:py-4 ${
+                f.severity === "critical"
+                  ? "border-rose-500 bg-gradient-to-r from-rose-50 to-white dark:from-rose-950/40 dark:to-[#0a1020]"
+                  : f.severity === "warning"
+                    ? "border-amber-500 bg-gradient-to-r from-amber-50 to-white dark:from-amber-950/40 dark:to-[#0a1020]"
+                    : "border-slate-300 bg-slate-50 dark:border-slate-500 dark:bg-[#0a1020]/60"
+              }`}
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider dash-muted">
+                  {f.category}
+                </span>
+                <span className="text-xs uppercase dash-subtle">{f.severity}</span>
+              </div>
+              <p className="mt-1 text-base font-semibold dash-title sm:text-lg">{f.title}</p>
+              <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">{f.what}</p>
+              <p className="mt-3 rounded-lg bg-indigo-50 px-3 py-2 text-sm text-indigo-950 ring-1 ring-indigo-100 dark:bg-black/20 dark:text-cyan-100 dark:ring-0">
+                <span className="font-semibold text-indigo-700 dark:text-cyan-300">Say: </span>
+                {f.say_this}
+              </p>
+              <p className="mt-2 text-sm text-amber-800 dark:text-amber-200/90">
+                <span className="font-semibold">Next: </span>
+                {f.next_step}
+              </p>
+            </div>
+          ))}
+        </div>
+      ),
+    });
+  }
+
+  const defaultDiagId =
+    findings.length > 0 ? "findings" : d.health === "degraded" || d.health === "critical" ? "breakdown" : null;
+
   return (
     <div className="space-y-4">
       <motion.div
@@ -130,175 +304,11 @@ export function DiagnosisPanel({ report }: { report: Report }) {
         </div>
       </motion.div>
 
-      {d.talk_track.length > 0 && (
-        <CollapsibleTile
-          title="Say this on the call"
-          subtitle="Talking points for status updates"
-          summary={`${d.talk_track.length} talking point${d.talk_track.length === 1 ? "" : "s"}`}
-          icon={MessageCircle}
-          tone={d.health === "critical" ? "crit" : d.health === "degraded" ? "warn" : "neutral"}
-          defaultOpen={d.health !== "healthy"}
-        >
-          <ol className="space-y-3">
-            {d.talk_track.map((line, i) => (
-              <li
-                key={i}
-                className="flex gap-3 text-sm font-medium leading-relaxed text-slate-700 dark:text-slate-200"
-              >
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-100 font-mono text-xs font-bold text-indigo-700 dark:bg-violet-500/30 dark:text-violet-200">
-                  {i + 1}
-                </span>
-                <span>{line}</span>
-              </li>
-            ))}
-          </ol>
-        </CollapsibleTile>
-      )}
-
-      <CollapsibleTile
-        title="Where CPU & memory go"
-        subtitle="Sampled ~1s like top — shows the top offenders on this box"
-        summary={breakdownSummary || `CPU ${cpu.usage_percent}% · Memory ${mem.used_percent}%`}
-        icon={Cpu}
-        tone={d.health === "critical" ? "crit" : d.health === "degraded" ? "warn" : "neutral"}
-        defaultOpen={d.health === "degraded" || d.health === "critical"}
-      >
-        <div className="grid gap-6 lg:grid-cols-2">
-          <div>
-            <h4 className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-cyan-700 dark:text-cyan-300/70">
-              <Cpu className="h-3.5 w-3.5" />
-              CPU breakdown
-            </h4>
-            <p className="mb-3 text-sm dash-muted">{d.cpu_story}</p>
-            <StackBar
-              segments={[
-                { label: "user", pct: cpu.user_percent ?? 0, color: "bg-cyan-400" },
-                { label: "system", pct: cpu.system_percent ?? 0, color: "bg-violet-400" },
-                { label: "iowait", pct: cpu.iowait_percent ?? 0, color: "bg-amber-400" },
-                { label: "steal", pct: cpu.steal_percent ?? 0, color: "bg-rose-400" },
-                { label: "idle", pct: cpu.idle_percent ?? 0, color: "bg-slate-600" },
-              ]}
-            />
-            <div className="mt-4 border-t border-slate-200 pt-3 dark:border-white/5">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider dash-subtle">
-                Top CPU processes
-                {top?.sample_seconds != null && (
-                  <span className="font-normal normal-case"> · sampled {top.sample_seconds}s</span>
-                )}
-              </p>
-              {(top?.by_cpu ?? []).slice(0, 6).map((p) => (
-                <ConsumerRow key={`cpu-${p.pid}`} p={p} mode="cpu" />
-              ))}
-              {!top?.by_cpu?.length && (
-                <p className="text-sm dash-subtle">No significant CPU consumers sampled.</p>
-              )}
-            </div>
-          </div>
-
-          <div>
-            <h4 className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-fuchsia-700 dark:text-fuchsia-300/70">
-              <MemoryStick className="h-3.5 w-3.5" />
-              Memory breakdown
-            </h4>
-            <p className="mb-3 text-sm dash-muted">{d.memory_story}</p>
-            <StackBar
-              segments={[
-                {
-                  label: "apps",
-                  pct: mem.total_bytes
-                    ? Math.round(((mem.app_bytes ?? 0) / mem.total_bytes) * 100)
-                    : 0,
-                  color: "bg-fuchsia-400",
-                },
-                {
-                  label: "cache",
-                  pct: mem.total_bytes
-                    ? Math.round(((mem.cached_bytes ?? 0) / mem.total_bytes) * 100)
-                    : 0,
-                  color: "bg-sky-400",
-                },
-                {
-                  label: "buffers",
-                  pct: mem.total_bytes
-                    ? Math.round(((mem.buffers_bytes ?? 0) / mem.total_bytes) * 100)
-                    : 0,
-                  color: "bg-teal-400",
-                },
-                {
-                  label: "free",
-                  pct: mem.total_bytes
-                    ? Math.round(((mem.free_bytes ?? 0) / mem.total_bytes) * 100)
-                    : 0,
-                  color: "bg-slate-600",
-                },
-              ]}
-            />
-            <p className="mt-2 text-xs dash-subtle">
-              Available: {fmtBytes(mem.available_bytes)} · Swap: {mem.swap_used_percent}%
-            </p>
-            <div className="mt-4 border-t border-slate-200 pt-3 dark:border-white/5">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider dash-subtle">
-                Top memory processes
-                {top?.sample_seconds != null && (
-                  <span className="font-normal normal-case"> · sampled {top.sample_seconds}s</span>
-                )}
-              </p>
-              {(top?.by_memory ?? []).slice(0, 6).map((p) => (
-                <ConsumerRow key={`mem-${p.pid}`} p={p} mode="mem" />
-              ))}
-              {!top?.by_memory?.length && (
-                <p className="text-sm dash-subtle">No memory consumers sampled.</p>
-              )}
-            </div>
-          </div>
-        </div>
-      </CollapsibleTile>
-
-      {findings.length > 0 && (
-        <CollapsibleTile
-          title="Findings & next steps"
-          summary={`${findings.length} issue${findings.length === 1 ? "" : "s"} need attention`}
-          icon={AlertCircle}
-          tone={
-            findings.some((f) => f.severity === "critical")
-              ? "crit"
-              : "warn"
-          }
-          defaultOpen
-        >
-          <div className="space-y-3">
-            {findings.map((f, i) => (
-              <div
-                key={i}
-                className={`rounded-2xl border-l-4 px-4 py-3 sm:px-5 sm:py-4 ${
-                  f.severity === "critical"
-                    ? "border-rose-500 bg-gradient-to-r from-rose-50 to-white dark:from-rose-950/40 dark:to-[#0a1020]"
-                    : f.severity === "warning"
-                      ? "border-amber-500 bg-gradient-to-r from-amber-50 to-white dark:from-amber-950/40 dark:to-[#0a1020]"
-                      : "border-slate-300 bg-slate-50 dark:border-slate-500 dark:bg-[#0a1020]/60"
-                }`}
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-bold uppercase tracking-wider dash-muted">
-                    {f.category}
-                  </span>
-                  <span className="text-xs uppercase dash-subtle">{f.severity}</span>
-                </div>
-                <p className="mt-1 text-base font-semibold dash-title sm:text-lg">{f.title}</p>
-                <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">{f.what}</p>
-                <p className="mt-3 rounded-lg bg-indigo-50 px-3 py-2 text-sm text-indigo-950 ring-1 ring-indigo-100 dark:bg-black/20 dark:text-cyan-100 dark:ring-0">
-                  <span className="font-semibold text-indigo-700 dark:text-cyan-300">Say: </span>
-                  {f.say_this}
-                </p>
-                <p className="mt-2 text-sm text-amber-800 dark:text-amber-200/90">
-                  <span className="font-semibold">Next: </span>
-                  {f.next_step}
-                </p>
-              </div>
-            ))}
-          </div>
-        </CollapsibleTile>
-      )}
+      <TileGrid
+        tiles={diagTiles}
+        defaultActiveId={defaultDiagId}
+        sectionLabel="Diagnosis"
+      />
     </div>
   );
 }

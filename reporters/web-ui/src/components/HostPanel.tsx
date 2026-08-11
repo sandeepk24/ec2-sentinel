@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   AlertTriangle,
@@ -5,6 +6,7 @@ import {
   Container,
   FileText,
   HardDrive,
+  LineChart,
   Server,
 } from "lucide-react";
 import {
@@ -17,10 +19,11 @@ import {
   statusColor,
 } from "../utils";
 import type { Alert, HostPayload } from "../types";
-import { CollapsibleTile } from "./CollapsibleTile";
+import { TileGrid, type TileDefinition } from "./CollapsibleTile";
 import { DiagnosisPanel } from "./DiagnosisPanel";
 import { GaugeCard } from "./GaugeCard";
-import { LiveCharts } from "./LiveCharts";
+import { LiveChartsContent, getChartsSummary } from "./LiveCharts";
+import { useHistoryStore } from "../store/history";
 
 interface Props {
   host: HostPayload;
@@ -83,6 +86,300 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
 
   const serviceTone =
     missingProcs > 0 || badPorts > 0 ? (missingProcs > 0 ? "crit" : "warn") : "ok";
+
+  const historyPoints = useHistoryStore((s) => s.points);
+
+  const detailTiles = useMemo(() => {
+    const tiles: TileDefinition[] = [];
+
+    if (isLive) {
+      tiles.push({
+        id: "charts",
+        title: "Charts",
+        summary: getChartsSummary(historyPoints),
+        icon: LineChart,
+        tone: "neutral",
+        content: <LiveChartsContent />,
+      });
+    }
+
+    if (visibleDisks.length > 0) {
+      tiles.push({
+        id: "disk",
+        title: "Disk",
+        summary: worstDisk
+          ? `${worstDisk.mount} ${worstDisk.used_percent}%`
+          : `${visibleDisks.length} mounts`,
+        icon: HardDrive,
+        tone: diskTone as TileDefinition["tone"],
+        content: (
+          <div className="overflow-x-auto rounded-xl border border-indigo-100/80 dark:border-white/10">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-indigo-50/50 text-left text-xs uppercase tracking-wider dash-subtle dark:bg-white/[0.03]">
+                  <th className="px-4 py-2.5 font-semibold">Mount</th>
+                  <th className="px-4 py-2.5 font-semibold">Used</th>
+                  <th className="px-4 py-2.5 font-semibold min-w-[140px]">Bar</th>
+                  <th className="px-4 py-2.5 font-semibold">Free</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleDisks.map((d) => {
+                  const level = levelForPercent(
+                    d.used_percent,
+                    t.disk_warn ?? 75,
+                    t.disk_crit ?? 90,
+                  );
+                  return (
+                    <tr key={d.mount} className="dash-row-hover">
+                      <td className="px-4 py-3 font-mono font-semibold text-teal-800 dark:text-cyan-200/90">
+                        {d.mount}
+                      </td>
+                      <td
+                        className={`px-4 py-3 font-mono font-semibold ${levelStyles[level].text}`}
+                      >
+                        {d.used_percent}%
+                      </td>
+                      <td className="px-4 py-3">
+                        <ProgressBar
+                          pct={d.used_percent}
+                          warn={t.disk_warn ?? 75}
+                          crit={t.disk_crit ?? 90}
+                        />
+                      </td>
+                      <td className="px-4 py-3 dash-muted">
+                        {fmtBytes(d.total_bytes - d.used_bytes)}
+                        {d.days_until_full != null && (
+                          <span className="ml-2 text-amber-700 dark:text-amber-300/80">
+                            ~{Math.round(d.days_until_full)}d left
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ),
+      });
+    }
+
+    if (processes.length > 0 || ports.length > 0) {
+      tiles.push({
+        id: "services",
+        title: "Services",
+        summary: `${processes.length - missingProcs}/${processes.length} proc · ${ports.length - badPorts}/${ports.length} ports`,
+        icon: Server,
+        tone: serviceTone as TileDefinition["tone"],
+        content: (
+          <div className="grid gap-4 lg:grid-cols-2">
+            <DataTable
+              embedded
+              title="Processes"
+              headers={["Name", "Status", "PID", "CPU", "Mem"]}
+              rows={processes.map((p) => [
+                p.name,
+                p.status,
+                String(p.pid ?? "—"),
+                p.cpu_percent != null ? `${p.cpu_percent}%` : "—",
+                p.memory_mb != null ? `${p.memory_mb} MB` : "—",
+              ])}
+              statusCol={1}
+            />
+            <DataTable
+              embedded
+              title="Ports"
+              headers={["Port", "Service", "Status", "Latency"]}
+              rows={ports.map((p) => [
+                String(p.port),
+                p.service,
+                p.status,
+                p.response_ms != null ? `${p.response_ms} ms` : "—",
+              ])}
+              statusCol={2}
+            />
+          </div>
+        ),
+      });
+    }
+
+    if (r.java?.enabled) {
+      tiles.push({
+        id: "java",
+        title: "Java",
+        summary:
+          !r.java.available && r.java.processes.length === 0
+            ? "None"
+            : `${r.java.processes.length} JVM · ${r.java.installation_count} RT`,
+        icon: Coffee,
+        tone:
+          r.java.processes.length > 0
+            ? "neutral"
+            : r.java.available
+              ? "ok"
+              : "warn",
+        content:
+          !r.java.available && r.java.processes.length === 0 ? (
+            <p className="text-sm dash-muted">
+              {r.java.error || "No Java runtime detected on this host."}
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {r.java.error && (
+                <p className="text-sm text-amber-800 dark:text-amber-200/90">{r.java.error}</p>
+              )}
+              <div className="grid gap-3 sm:grid-cols-3">
+                <MiniStat label="Runtimes" value={String(r.java.installation_count)} />
+                <MiniStat label="JDK" value={String(r.java.jdk_count)} />
+                <MiniStat label="JVMs" value={String(r.java.processes.length)} />
+              </div>
+              {r.java.installations.length > 0 && (
+                <DataTable
+                  embedded
+                  title="Installations"
+                  headers={["Vendor", "Version", "Type", "Path", "javac"]}
+                  rows={r.java.installations.map((j) => [
+                    j.vendor,
+                    j.version,
+                    j.is_jdk ? "JDK" : "JRE",
+                    j.path.length > 40 ? "…" + j.path.slice(-39) : j.path,
+                    j.javac_version ?? "—",
+                  ])}
+                />
+              )}
+              <DataTable
+                embedded
+                title="Running Java (ps -ef | grep java)"
+                headers={["PID", "Name", "Version", "Binary", "Command"]}
+                rows={
+                  r.java.processes.length > 0
+                    ? r.java.processes.map((p) => [
+                        String(p.pid),
+                        p.name,
+                        p.version ?? "—",
+                        p.java_path
+                          ? p.java_path.length > 28
+                            ? "…" + p.java_path.slice(-27)
+                            : p.java_path
+                          : "—",
+                        p.cmdline.length > 44 ? p.cmdline.slice(0, 44) + "…" : p.cmdline,
+                      ])
+                    : [["—", "—", "—", "—", "No running JVM processes"]]
+                }
+              />
+            </div>
+          ),
+      });
+    }
+
+    if (r.docker?.available) {
+      tiles.push({
+        id: "docker",
+        title: "Docker",
+        summary: `${r.docker.running_count} up · ${r.docker.stopped_count} down`,
+        icon: Container,
+        tone: r.docker.stopped_count > 0 ? "warn" : "ok",
+        content: (
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <MiniStat label="Version" value={`v${r.docker.server_version}`} small />
+              <MiniStat label="Running" value={String(r.docker.running_count)} />
+              <MiniStat label="Images" value={String(r.docker.image_count)} />
+              <MiniStat label="Reclaimable" value={r.docker.disk.images_reclaimable} small />
+            </div>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <DataTable
+                embedded
+                title="Containers"
+                headers={["Name", "Image", "State", "Status"]}
+                rows={(r.docker.containers ?? []).map((c) => [
+                  c.name,
+                  c.image.length > 24 ? c.image.slice(0, 24) + "…" : c.image,
+                  c.state,
+                  c.status.length > 36 ? c.status.slice(0, 36) + "…" : c.status,
+                ])}
+                rowClass={(rowIdx) => {
+                  const c = r.docker!.containers[rowIdx];
+                  return { stateCol: dockerStateColor(c.state, c.health) };
+                }}
+                statusCol={2}
+              />
+              <DataTable
+                embedded
+                title="Images"
+                headers={["Repository", "Tag", "Size", "Age"]}
+                rows={(r.docker.images ?? []).map((img) => [
+                  img.repository,
+                  img.tag,
+                  img.size,
+                  img.created_since || "—",
+                ])}
+              />
+            </div>
+          </div>
+        ),
+      });
+    }
+
+    if (r.log_matches?.length > 0) {
+      tiles.push({
+        id: "logs",
+        title: "Logs",
+        summary: `${logHits} hits`,
+        icon: FileText,
+        tone: logHits > 0 ? "warn" : "neutral",
+        content: (
+          <DataTable
+            embedded
+            title="Matches"
+            headers={["Pattern", "Hits", "File"]}
+            rows={r.log_matches.map((m) => [m.pattern, String(m.count), m.file])}
+            warnCol={1}
+          />
+        ),
+      });
+    }
+
+    if (alerts.length > 0) {
+      tiles.push({
+        id: "alerts",
+        title: "Alerts",
+        summary: `${alerts.length} firing`,
+        icon: AlertTriangle,
+        tone: alerts.some((a) => a.severity === "critical") ? "crit" : "warn",
+        content: <AlertList alerts={alerts} embedded />,
+      });
+    }
+
+    return tiles;
+  }, [
+    isLive,
+    historyPoints,
+    visibleDisks,
+    worstDisk,
+    diskTone,
+    t,
+    processes,
+    ports,
+    missingProcs,
+    badPorts,
+    serviceTone,
+    r.java,
+    r.docker,
+    r.log_matches,
+    logHits,
+    alerts,
+  ]);
+
+  const defaultDetailId =
+    alerts.length > 0
+      ? "alerts"
+      : diskTone !== "neutral"
+        ? "disk"
+        : serviceTone !== "ok"
+          ? "services"
+          : null;
 
   return (
     <motion.section
@@ -148,255 +445,11 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
         />
       </div>
 
-      {isLive && <LiveCharts />}
-
-      {visibleDisks.length > 0 && (
-        <CollapsibleTile
-          title="Disk"
-          summary={
-            worstDisk
-              ? `${worstDisk.mount} ${worstDisk.used_percent}% · ${visibleDisks.length} mount${visibleDisks.length === 1 ? "" : "s"}`
-              : `${visibleDisks.length} mounts`
-          }
-          icon={HardDrive}
-          tone={diskTone as "neutral" | "warn" | "crit"}
-          defaultOpen={diskTone !== "neutral"}
-        >
-          <div className="overflow-x-auto rounded-xl border border-indigo-100/80 dark:border-white/10">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-indigo-50/50 text-left text-xs uppercase tracking-wider dash-subtle dark:bg-white/[0.03]">
-                  <th className="px-4 py-2.5 font-semibold">Mount</th>
-                  <th className="px-4 py-2.5 font-semibold">Used</th>
-                  <th className="px-4 py-2.5 font-semibold min-w-[140px]">Bar</th>
-                  <th className="px-4 py-2.5 font-semibold">Free</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleDisks.map((d) => {
-                  const level = levelForPercent(
-                    d.used_percent,
-                    t.disk_warn ?? 75,
-                    t.disk_crit ?? 90,
-                  );
-                  return (
-                    <tr key={d.mount} className="dash-row-hover">
-                      <td className="px-4 py-3 font-mono font-semibold text-teal-800 dark:text-cyan-200/90">
-                        {d.mount}
-                      </td>
-                      <td
-                        className={`px-4 py-3 font-mono font-semibold ${levelStyles[level].text}`}
-                      >
-                        {d.used_percent}%
-                      </td>
-                      <td className="px-4 py-3">
-                        <ProgressBar
-                          pct={d.used_percent}
-                          warn={t.disk_warn ?? 75}
-                          crit={t.disk_crit ?? 90}
-                        />
-                      </td>
-                      <td className="px-4 py-3 dash-muted">
-                        {fmtBytes(d.total_bytes - d.used_bytes)}
-                        {d.days_until_full != null && (
-                          <span className="ml-2 text-amber-700 dark:text-amber-300/80">
-                            ~{Math.round(d.days_until_full)}d left
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </CollapsibleTile>
-      )}
-
-      {(processes.length > 0 || ports.length > 0) && (
-        <CollapsibleTile
-          title="Processes & ports"
-          summary={`${processes.length - missingProcs}/${processes.length} processes · ${ports.length - badPorts}/${ports.length} ports open`}
-          icon={Server}
-          tone={serviceTone as "ok" | "warn" | "crit"}
-          defaultOpen={serviceTone !== "ok"}
-        >
-          <div className="grid gap-4 lg:grid-cols-2">
-            <DataTable
-              embedded
-              title="Processes"
-              headers={["Name", "Status", "PID", "CPU", "Mem"]}
-              rows={processes.map((p) => [
-                p.name,
-                p.status,
-                String(p.pid ?? "—"),
-                p.cpu_percent != null ? `${p.cpu_percent}%` : "—",
-                p.memory_mb != null ? `${p.memory_mb} MB` : "—",
-              ])}
-              statusCol={1}
-            />
-            <DataTable
-              embedded
-              title="Ports"
-              headers={["Port", "Service", "Status", "Latency"]}
-              rows={ports.map((p) => [
-                String(p.port),
-                p.service,
-                p.status,
-                p.response_ms != null ? `${p.response_ms} ms` : "—",
-              ])}
-              statusCol={2}
-            />
-          </div>
-        </CollapsibleTile>
-      )}
-
-      {r.java?.enabled && (
-        <CollapsibleTile
-          title="Java / JVM"
-          summary={
-            !r.java.available && r.java.processes.length === 0
-              ? r.java.error || "No Java detected"
-              : `${r.java.processes.length} JVM${r.java.processes.length === 1 ? "" : "s"} · ${r.java.installation_count} runtime${r.java.installation_count === 1 ? "" : "s"}`
-          }
-          icon={Coffee}
-          tone={
-            r.java.processes.length > 0
-              ? "neutral"
-              : r.java.available
-                ? "ok"
-                : "warn"
-          }
-        >
-          {!r.java.available && r.java.processes.length === 0 ? (
-            <p className="text-sm dash-muted">
-              {r.java.error || "No Java runtime detected on this host."}
-            </p>
-          ) : (
-            <div className="space-y-4">
-              {r.java.error && (
-                <p className="text-sm text-amber-800 dark:text-amber-200/90">{r.java.error}</p>
-              )}
-              <div className="grid gap-3 sm:grid-cols-3">
-                <MiniStat label="Runtimes" value={String(r.java.installation_count)} />
-                <MiniStat label="JDK installs" value={String(r.java.jdk_count)} />
-                <MiniStat label="Running JVMs" value={String(r.java.processes.length)} />
-              </div>
-              {r.java.installations.length > 0 && (
-                <DataTable
-                  embedded
-                  title="Installations"
-                  headers={["Vendor", "Version", "Type", "Path", "javac"]}
-                  rows={r.java.installations.map((j) => [
-                    j.vendor,
-                    j.version,
-                    j.is_jdk ? "JDK" : "JRE",
-                    j.path.length > 40 ? "…" + j.path.slice(-39) : j.path,
-                    j.javac_version ?? "—",
-                  ])}
-                />
-              )}
-              <DataTable
-                embedded
-                title="Running Java (ps -ef | grep java)"
-                headers={["PID", "Name", "Version", "Binary", "Command"]}
-                rows={
-                  r.java.processes.length > 0
-                    ? r.java.processes.map((p) => [
-                        String(p.pid),
-                        p.name,
-                        p.version ?? "—",
-                        p.java_path
-                          ? p.java_path.length > 28
-                            ? "…" + p.java_path.slice(-27)
-                            : p.java_path
-                          : "—",
-                        p.cmdline.length > 44 ? p.cmdline.slice(0, 44) + "…" : p.cmdline,
-                      ])
-                    : [["—", "—", "—", "—", "No running JVM processes"]]
-                }
-              />
-            </div>
-          )}
-        </CollapsibleTile>
-      )}
-
-      {r.docker?.available && (
-        <CollapsibleTile
-          title="Docker"
-          summary={`${r.docker.running_count} running · ${r.docker.stopped_count} stopped · ${r.docker.image_count} images`}
-          icon={Container}
-          tone={r.docker.stopped_count > 0 ? "warn" : "ok"}
-        >
-          <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <MiniStat label="Version" value={`v${r.docker.server_version}`} small />
-              <MiniStat label="Running" value={String(r.docker.running_count)} />
-              <MiniStat label="Images" value={String(r.docker.image_count)} />
-              <MiniStat label="Reclaimable" value={r.docker.disk.images_reclaimable} small />
-            </div>
-            <div className="grid gap-4 lg:grid-cols-2">
-              <DataTable
-                embedded
-                title="Containers"
-                headers={["Name", "Image", "State", "Status"]}
-                rows={(r.docker.containers ?? []).map((c) => [
-                  c.name,
-                  c.image.length > 24 ? c.image.slice(0, 24) + "…" : c.image,
-                  c.state,
-                  c.status.length > 36 ? c.status.slice(0, 36) + "…" : c.status,
-                ])}
-                rowClass={(rowIdx) => {
-                  const c = r.docker!.containers[rowIdx];
-                  return { stateCol: dockerStateColor(c.state, c.health) };
-                }}
-                statusCol={2}
-              />
-              <DataTable
-                embedded
-                title="Images"
-                headers={["Repository", "Tag", "Size", "Age"]}
-                rows={(r.docker.images ?? []).map((img) => [
-                  img.repository,
-                  img.tag,
-                  img.size,
-                  img.created_since || "—",
-                ])}
-              />
-            </div>
-          </div>
-        </CollapsibleTile>
-      )}
-
-      {r.log_matches?.length > 0 && (
-        <CollapsibleTile
-          title="Log patterns"
-          summary={`${logHits} hit${logHits === 1 ? "" : "s"} · ${r.log_matches.length} pattern${r.log_matches.length === 1 ? "" : "s"}`}
-          icon={FileText}
-          tone={logHits > 0 ? "warn" : "neutral"}
-          defaultOpen={logHits > 0}
-        >
-          <DataTable
-            embedded
-            title="Matches"
-            headers={["Pattern", "Hits", "File"]}
-            rows={r.log_matches.map((m) => [m.pattern, String(m.count), m.file])}
-            warnCol={1}
-          />
-        </CollapsibleTile>
-      )}
-
-      {alerts.length > 0 && (
-        <CollapsibleTile
-          title="Active alerts"
-          summary={`${alerts.length} alert${alerts.length === 1 ? "" : "s"} firing`}
-          icon={AlertTriangle}
-          tone={alerts.some((a) => a.severity === "critical") ? "crit" : "warn"}
-          defaultOpen
-        >
-          <AlertList alerts={alerts} embedded />
-        </CollapsibleTile>
-      )}
+      <TileGrid
+        tiles={detailTiles}
+        defaultActiveId={defaultDetailId}
+        sectionLabel="Host details"
+      />
     </motion.section>
   );
 }
