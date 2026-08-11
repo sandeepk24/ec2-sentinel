@@ -6,7 +6,6 @@ import { fetchHealth } from "./lib/api";
 import { useHistoryStore } from "./store/history";
 import { applyTheme, useThemeStore } from "./store/theme";
 import { HeaderBar } from "./components/HeaderBar";
-import { LiveCharts } from "./components/LiveCharts";
 import { HostPanel } from "./components/HostPanel";
 
 export default function App() {
@@ -143,7 +142,7 @@ export default function App() {
               key="data"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="space-y-8"
+              className="space-y-4"
             >
               {query.isError && (
                 <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50/80 px-4 py-2 text-sm text-amber-950 shadow-sm dark:border-amber-500/30 dark:from-amber-950/40 dark:to-[#0a1020] dark:text-amber-100 dark:shadow-none">
@@ -151,8 +150,6 @@ export default function App() {
                   Last refresh failed — showing cached data
                 </div>
               )}
-
-              <LiveCharts />
 
               {query.data.live && (
                 <HostPanel

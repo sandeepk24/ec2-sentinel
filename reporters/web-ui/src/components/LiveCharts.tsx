@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { motion } from "framer-motion";
 import {
   Area,
   AreaChart,
@@ -9,6 +8,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { LineChart } from "lucide-react";
+import { CollapsibleTile } from "./CollapsibleTile";
 import { useHistoryStore } from "../store/history";
 import { cn } from "../lib/cn";
 
@@ -46,11 +47,18 @@ export function LiveCharts() {
   }));
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="grid gap-4 lg:grid-cols-2"
+    <CollapsibleTile
+      title="Live charts"
+      subtitle="CPU and memory samples while this page is open"
+      summary={
+        chartData.length >= 2
+          ? `Latest CPU ${chartData[chartData.length - 1]?.cpu?.toFixed(0) ?? "—"}% · Mem ${chartData[chartData.length - 1]?.memory?.toFixed(0) ?? "—"}%`
+          : "Collecting samples…"
+      }
+      icon={LineChart}
+      tone="neutral"
     >
+      <div className="grid gap-4 lg:grid-cols-2">
       <ChartCard title="CPU over time" subtitle="Live samples while this page is open">
         {chartData.length < 2 ? (
           <EmptyChart hint="Collecting samples…" />
@@ -134,7 +142,8 @@ export function LiveCharts() {
           </ResponsiveContainer>
         )}
       </ChartCard>
-    </motion.div>
+      </div>
+    </CollapsibleTile>
   );
 }
 
@@ -148,7 +157,7 @@ function ChartCard({
   children: ReactNode;
 }) {
   return (
-    <div className="dash-panel p-4">
+    <div className="rounded-xl border border-indigo-100/80 bg-indigo-50/20 p-4 dark:border-white/10 dark:bg-white/[0.02]">
       <div className="mb-3 flex items-baseline justify-between gap-2">
         <h3 className="font-display text-sm font-bold dash-title">{title}</h3>
         <span className="text-xs font-medium dash-subtle">{subtitle}</span>
