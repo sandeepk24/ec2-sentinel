@@ -45,6 +45,10 @@ class DockerImage:
             return f"<none>:{self.tag}"
         return f"{self.repository}:{self.tag}"
 
+    @property
+    def is_dangling(self) -> bool:
+        return self.repository == "<none>" and self.tag == "<none>"
+
 
 @dataclass
 class DockerDiskUsage:
@@ -54,7 +58,16 @@ class DockerDiskUsage:
     containers_reclaimable: str = "0B"
     volumes_size: str = "0B"
     volumes_reclaimable: str = "0B"
+    build_cache_size: str = "0B"
     build_cache_reclaimable: str = "0B"
+
+
+@dataclass
+class DockerCleanupSuggestion:
+    severity: str          # info | warning
+    title: str
+    command: str
+    description: str
 
 
 @dataclass
@@ -92,6 +105,14 @@ class DockerReport:
     @property
     def missing_expected(self) -> list[ExpectedContainer]:
         return [e for e in self.expected if not e.found or not e.running]
+
+    @property
+    def dangling_images(self) -> list[DockerImage]:
+        return [img for img in self.images if img.is_dangling]
+
+    @property
+    def dangling_count(self) -> int:
+        return len(self.dangling_images)
 
 
 def _run_docker(args: list[str], timeout: float = 15.0) -> tuple[bool, str, str]:
@@ -219,6 +240,7 @@ def _docker_disk_usage() -> DockerDiskUsage:
                 disk.volumes_size = str(total)
                 disk.volumes_reclaimable = str(reclaim).split("(")[0].strip()
             elif kind == "build cache":
+                disk.build_cache_size = str(total)
                 disk.build_cache_reclaimable = str(reclaim).split("(")[0].strip()
         return disk
 
@@ -321,3 +343,125 @@ def reclaimable_bytes(disk: DockerDiskUsage) -> float:
     ):
         total += _parse_size_bytes(val.split("(")[0].strip())
     return total
+
+
+def _format_bytes(num_bytes: float) -> str:
+    """Human-readable size for suggestion text."""
+    if num_bytes >= 1024 ** 3:
+        return f"{num_bytes / (1024 ** 3):.1f}GB"
+    if num_bytes >= 1024 ** 2:
+        return f"{num_bytes / (1024 ** 2):.0f}MB"
+    if num_bytes >= 1024:
+        return f"{num_bytes / 1024:.0f}KB"
+    return f"{num_bytes:.0f}B"
+
+
+def cleanup_suggestions(
+    report: DockerReport,
+    docker_config: Optional[dict] = None,
+) -> list[DockerCleanupSuggestion]:
+    """Actionable cleanup commands when Docker disk usage is high."""
+    if not report.available:
+        return []
+
+    cfg = docker_config or {}
+    suggestions: list[DockerCleanupSuggestion] = []
+    disk = report.disk
+
+    cache_reclaim = _parse_size_bytes(disk.build_cache_reclaimable)
+    cache_warn_gb = cfg.get("cache_warn_gb", 2)
+    if cache_reclaim >= cache_warn_gb * (1024 ** 3):
+        suggestions.append(DockerCleanupSuggestion(
+            severity="warning",
+            title="Build cache is using a lot of space",
+            command="docker builder prune -f",
+            description=(
+                f"{disk.build_cache_reclaimable} of build cache can be reclaimed. "
+                "Safe to run — only removes unused build layers."
+            ),
+        ))
+
+    dangling_warn = cfg.get("dangling_warn_count", 5)
+    dangling = report.dangling_images
+    if len(dangling) >= dangling_warn:
+        dangling_bytes = sum(_parse_size_bytes(img.size) for img in dangling)
+        suggestions.append(DockerCleanupSuggestion(
+            severity="warning",
+            title=f"{len(dangling)} dangling images ({_format_bytes(dangling_bytes)})",
+            command="docker image prune -f",
+            description=(
+                "Dangling images are untagged leftovers from rebuilds. "
+                "Prune removes them without touching tagged images."
+            ),
+        ))
+    elif dangling:
+        dangling_bytes = sum(_parse_size_bytes(img.size) for img in dangling)
+        suggestions.append(DockerCleanupSuggestion(
+            severity="info",
+            title=f"{len(dangling)} dangling image(s) ({_format_bytes(dangling_bytes)})",
+            command="docker image prune -f",
+            description="Small cleanup — removes untagged intermediate layers.",
+        ))
+
+    images_reclaim = _parse_size_bytes(disk.images_reclaimable)
+    if images_reclaim >= 2 * (1024 ** 3) and not any(
+        s.command == "docker image prune -f" for s in suggestions
+    ):
+        suggestions.append(DockerCleanupSuggestion(
+            severity="info",
+            title="Unused images reclaimable",
+            command="docker image prune -a -f",
+            description=(
+                f"{disk.images_reclaimable} of image storage is reclaimable. "
+                "The -a flag removes images not used by any container — verify first."
+            ),
+        ))
+
+    containers_reclaim = _parse_size_bytes(disk.containers_reclaimable)
+    if report.stopped_count > 0 and containers_reclaim >= 500 * 1024 * 1024:
+        suggestions.append(DockerCleanupSuggestion(
+            severity="info",
+            title=f"{report.stopped_count} stopped container(s)",
+            command="docker container prune -f",
+            description=(
+                f"{disk.containers_reclaimable} from stopped containers. "
+                "Removes exited containers — data in volumes is kept."
+            ),
+        ))
+
+    volumes_reclaim = _parse_size_bytes(disk.volumes_reclaimable)
+    if volumes_reclaim >= 1024 ** 3:
+        suggestions.append(DockerCleanupSuggestion(
+            severity="warning",
+            title="Unused volumes reclaimable",
+            command="docker volume prune -f",
+            description=(
+                f"{disk.volumes_reclaimable} in unused volumes. "
+                "Confirm no important data before pruning."
+            ),
+        ))
+
+    reclaim_gb = reclaimable_bytes(disk) / (1024 ** 3)
+    disk_warn_gb = cfg.get("disk_reclaim_warn_gb", 5)
+    if reclaim_gb >= disk_warn_gb:
+        suggestions.append(DockerCleanupSuggestion(
+            severity="warning",
+            title=f"{reclaim_gb:.1f} GB total reclaimable",
+            command="docker system prune -a --volumes -f",
+            description=(
+                "Aggressive cleanup: removes unused images, containers, networks, "
+                "and volumes. Use only when you are sure nothing important is unused."
+            ),
+        ))
+    elif reclaim_gb >= 1 and not suggestions:
+        suggestions.append(DockerCleanupSuggestion(
+            severity="info",
+            title=f"{reclaim_gb:.1f} GB reclaimable overall",
+            command="docker system prune -f",
+            description=(
+                "Removes stopped containers, dangling images, and unused networks. "
+                "Does not remove tagged images or volumes."
+            ),
+        ))
+
+    return suggestions
