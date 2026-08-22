@@ -7,6 +7,7 @@ Turns raw metrics into plain-English findings you can read aloud on a call.
 from dataclasses import dataclass, field
 from typing import Optional
 
+from analyzers.suggestions import ActionSuggestion, resource_suggestions, _proc_display
 from collectors.docker import cleanup_suggestions, reclaimable_bytes
 
 
@@ -30,6 +31,21 @@ class Diagnosis:
     cpu_story: str = ""
     memory_story: str = ""
     talk_track: list[str] = field(default_factory=list)
+    suggestions: list[ActionSuggestion] = field(default_factory=list)
+
+
+def _cpu_offender(top_report) -> str:
+    if not top_report or not top_report.by_cpu:
+        return ""
+    p = top_report.by_cpu[0]
+    return f"{_proc_display(p.name, p.cmdline)} (pid {p.pid}, {p.cpu_percent}% CPU)"
+
+
+def _mem_offender(top_report) -> str:
+    if not top_report or not top_report.by_memory:
+        return ""
+    p = top_report.by_memory[0]
+    return f"{_proc_display(p.name, p.cmdline)} (pid {p.pid}, {p.memory_mb} MB)"
 
 
 def _fmt_gb(b: int) -> str:
@@ -50,6 +66,8 @@ def diagnose(
     cpu = system.cpu
     mem = system.memory
     findings: list[Finding] = []
+    cpu_offender = _cpu_offender(top_report)
+    mem_offender = _mem_offender(top_report)
 
     # ------------------------------------------------------------------ CPU
     if cpu.steal_percent >= 10:
@@ -95,7 +113,11 @@ def diagnose(
                 f"The server feels slow because {cpu.iowait_percent}% of CPU time "
                 "is iowait — we're blocked on disk, not CPU-bound."
             ),
-            next_step="Check EBS metrics (VolumeQueueLength, Latency); look for disk-heavy processes.",
+            next_step=(
+                f"Check EBS metrics; run iotop or docker stats. "
+                f"Top CPU right now: {cpu_offender}." if cpu_offender
+                else "Check EBS metrics (VolumeQueueLength, Latency); look for disk-heavy processes."
+            ),
         ))
     elif cpu.iowait_percent >= 10:
         findings.append(Finding(
@@ -105,7 +127,11 @@ def diagnose(
             what=f"iowait is {cpu.iowait_percent}%.",
             why_it_matters="Some work is stalled waiting for storage.",
             say_this=f"We're spending {cpu.iowait_percent}% of CPU time waiting on disk I/O.",
-            next_step="Identify which process is doing heavy I/O (iotop / docker stats).",
+            next_step=(
+                f"iotop -oPa or docker stats — top CPU process is {cpu_offender}."
+                if cpu_offender
+                else "Identify which process is doing heavy I/O (iotop / docker stats)."
+            ),
         ))
 
     if cpu.load_avg_1 > cpu.core_count * 1.5:
@@ -122,7 +148,11 @@ def diagnose(
                 f"Load average is {cpu.load_avg_1} with only {cpu.core_count} cores — "
                 "we're overloaded. Top CPU consumers are the first place to look."
             ),
-            next_step="Scale vertically, add replicas, or stop the top CPU burners.",
+            next_step=(
+                f"Top CPU: {cpu_offender} — scale, optimize, or stop it."
+                if cpu_offender
+                else "Scale vertically, add replicas, or stop the top CPU burners."
+            ),
         ))
     elif cpu.load_avg_1 > cpu.core_count:
         findings.append(Finding(
@@ -132,7 +162,11 @@ def diagnose(
             what=f"Load {cpu.load_avg_1} > {cpu.core_count} cores.",
             why_it_matters="Work is starting to queue; responses may get slower.",
             say_this=f"Load ({cpu.load_avg_1}) is above our {cpu.core_count} cores — we're at capacity.",
-            next_step="Review top CPU processes; consider scaling if sustained.",
+            next_step=(
+                f"Top CPU: {cpu_offender} — review before load grows."
+                if cpu_offender
+                else "Review top CPU processes; consider scaling if sustained."
+            ),
         ))
 
     if cpu.usage_percent >= t.get("cpu_crit", 95):
@@ -148,7 +182,11 @@ def diagnose(
                 f"{'userland apps' if cpu.user_percent >= cpu.system_percent else 'kernel/system'} "
                 f"({cpu.user_percent}% user / {cpu.system_percent}% system)."
             ),
-            next_step="Identify top CPU processes; scale or optimize the hot path.",
+            next_step=(
+                f"Top CPU: {cpu_offender} — run top -H -p <pid> or jstack for Java."
+                if cpu_offender
+                else "Identify top CPU processes; scale or optimize the hot path."
+            ),
         ))
     elif cpu.usage_percent >= t.get("cpu_warn", 80):
         findings.append(Finding(
@@ -158,7 +196,11 @@ def diagnose(
             what=f"CPU at {cpu.usage_percent}% (user {cpu.user_percent}%, system {cpu.system_percent}%).",
             why_it_matters="Approaching saturation — watch for latency.",
             say_this=f"CPU is at {cpu.usage_percent}% and climbing into the danger zone.",
-            next_step="Check top CPU consumers before it hits critical.",
+            next_step=(
+                f"Top CPU: {cpu_offender} — investigate before critical."
+                if cpu_offender
+                else "Check top CPU consumers before it hits critical."
+            ),
         ))
 
     # ------------------------------------------------------------------ Memory
@@ -176,7 +218,11 @@ def diagnose(
                 f"We're swap thrashing — {mem.swap_used_percent}% of swap is in use. "
                 "This is why the server is slow even if CPU looks fine."
             ),
-            next_step="Find top RSS processes; free memory or resize the instance.",
+            next_step=(
+                f"Top memory: {mem_offender} — free RAM or resize instance."
+                if mem_offender
+                else "Find top RSS processes; free memory or resize the instance."
+            ),
         ))
     elif mem.swap_used_percent >= 10:
         findings.append(Finding(
@@ -186,7 +232,11 @@ def diagnose(
             what=f"Swap {mem.swap_used_percent}% used.",
             why_it_matters="Memory pressure is starting; performance may degrade.",
             say_this=f"We're using swap ({mem.swap_used_percent}%) — memory is getting tight.",
-            next_step="Watch top memory consumers; plan a resize if it grows.",
+            next_step=(
+                f"Top memory: {mem_offender} — watch before swap grows."
+                if mem_offender
+                else "Watch top memory consumers; plan a resize if it grows."
+            ),
         ))
 
     if mem.oom_kill_count > 0:
@@ -218,7 +268,11 @@ def diagnose(
                 f"Only {_fmt_gb(mem.available_bytes)} available of "
                 f"{_fmt_gb(mem.total_bytes)}. Top memory hogs are listed below."
             ),
-            next_step="Kill or restart the largest consumers; resize if chronic.",
+            next_step=(
+                f"Top memory: {mem_offender} — restart or kill largest consumer."
+                if mem_offender
+                else "Kill or restart the largest consumers; resize if chronic."
+            ),
         ))
     elif mem.used_percent >= t.get("memory_warn", 80):
         findings.append(Finding(
@@ -228,7 +282,11 @@ def diagnose(
             what=f"Memory {mem.used_percent}% used, {_fmt_gb(mem.available_bytes)} available.",
             why_it_matters="Less headroom for spikes and caches.",
             say_this=f"Memory is at {mem.used_percent}% — we should identify the top consumers.",
-            next_step="Review top RSS processes before we tip into swap.",
+            next_step=(
+                f"Top memory: {mem_offender} — review before swap."
+                if mem_offender
+                else "Review top RSS processes before we tip into swap."
+            ),
         ))
 
     # ------------------------------------------------------------------ Disk
@@ -243,7 +301,10 @@ def diagnose(
                 what=f"{d.mount} at {d.used_percent}% ({_fmt_gb(d.free_bytes)} free).",
                 why_it_matters="Writes fail, logs stop, databases crash — classic outage.",
                 say_this=f"{d.mount} is {d.used_percent}% full — we need space now.",
-                next_step="Run disk-cleanup.sh or grow the EBS volume.",
+                next_step=(
+                    f"du -xh {d.mount} --max-depth=1 | sort -h; "
+                    f"./scripts/disk-cleanup.sh; grow EBS if needed."
+                ),
             ))
         elif d.used_percent >= t.get("disk_warn", 75):
             msg = f"{d.mount} at {d.used_percent}%."
@@ -256,7 +317,10 @@ def diagnose(
                 what=msg,
                 why_it_matters="Build artifacts and logs fill disks quietly.",
                 say_this=f"{d.mount} is at {d.used_percent}% — we should clean before it hits critical.",
-                next_step="Identify large directories; prune Docker/build caches.",
+                next_step=(
+                    f"du -xh {d.mount} --max-depth=1 | sort -h | tail -15; "
+                    "prune Docker/build caches and rotated logs."
+                ),
             ))
 
     # ------------------------------------------------------------------ Docker
@@ -409,6 +473,8 @@ def diagnose(
     if not talk_track:
         talk_track = [summary]
 
+    suggestions = resource_suggestions(system, top_report, docker_report, t)
+
     return Diagnosis(
         headline=headline,
         summary=summary,
@@ -417,6 +483,7 @@ def diagnose(
         cpu_story=cpu_story,
         memory_story=memory_story,
         talk_track=talk_track,
+        suggestions=suggestions,
     )
 
 
@@ -428,6 +495,18 @@ def diagnosis_to_dict(d: Diagnosis) -> dict:
         "cpu_story": d.cpu_story,
         "memory_story": d.memory_story,
         "talk_track": d.talk_track,
+        "suggestions": [
+            {
+                "severity": s.severity,
+                "category": s.category,
+                "title": s.title,
+                "command": s.command,
+                "description": s.description,
+                "process_name": s.process_name,
+                "pid": s.pid,
+            }
+            for s in d.suggestions
+        ],
         "findings": [
             {
                 "severity": f.severity,
