@@ -31,6 +31,8 @@ thresholds:
 docker:
   enabled: true                  # set false to skip docker checks
   disk_reclaim_warn_gb: 5        # warn when reclaimable docker disk exceeds this
+  cache_warn_gb: 2               # warn when reclaimable build cache exceeds this
+  dangling_warn_count: 5         # warn when dangling (untagged) images exceed this
   images_warn_count: 50          # warn when stored image count exceeds this
 
   # Optional: containers that MUST be running

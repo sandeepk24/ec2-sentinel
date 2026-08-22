@@ -27,7 +27,13 @@ import yaml
 
 from alerts import Alert, dispatch_alerts
 from analyzers.diagnose import diagnose, diagnosis_to_dict
-from collectors.docker import collect_docker, reclaimable_bytes
+from collectors.docker import (
+    collect_docker,
+    reclaimable_bytes,
+    cleanup_suggestions,
+    _parse_size_bytes,
+    _format_bytes,
+)
 from collectors.java import collect_java
 from collectors.system import collect_system
 from collectors.process import collect_processes
@@ -304,6 +310,30 @@ def generate_alerts(
                 hostname=hostname, timestamp=now, source="docker",
             ))
 
+        cache_warn_gb = docker_cfg.get("cache_warn_gb", 2)
+        cache_gb = _parse_size_bytes(docker_report.disk.build_cache_reclaimable) / (1024 ** 3)
+        if cache_gb >= cache_warn_gb:
+            alerts.append(Alert(
+                severity="warning", title="Docker Build Cache High",
+                message=(
+                    f"{docker_report.disk.build_cache_reclaimable} build cache reclaimable "
+                    "— run docker builder prune"
+                ),
+                hostname=hostname, timestamp=now, source="docker",
+            ))
+
+        dangling_warn = docker_cfg.get("dangling_warn_count", 5)
+        if docker_report.dangling_count >= dangling_warn:
+            alerts.append(Alert(
+                severity="warning", title="Docker Dangling Images High",
+                message=(
+                    f"{docker_report.dangling_count} dangling images "
+                    f"({docker_report.disk.images_reclaimable} reclaimable) "
+                    "— run docker image prune"
+                ),
+                hostname=hostname, timestamp=now, source="docker",
+            ))
+
         images_warn = docker_cfg.get("images_warn_count", 50)
         if len(docker_report.images) >= images_warn:
             alerts.append(Alert(
@@ -321,7 +351,7 @@ def generate_alerts(
 
 def report_to_dict(
     system, proc_report, port_report, log_report, docker_report,
-    top_report=None, diagnosis=None, java_report=None,
+    top_report=None, diagnosis=None, java_report=None, docker_cfg=None,
 ) -> dict:
     """Convert all reports to a JSON-serializable dict."""
     top_report = top_report or collect_top(limit=8, sample_seconds=0.5)
@@ -429,6 +459,8 @@ def report_to_dict(
             "running_count": docker_report.running_count,
             "stopped_count": docker_report.stopped_count,
             "image_count": len(docker_report.images),
+            "dangling_count": docker_report.dangling_count,
+            "total_reclaimable": _format_bytes(reclaimable_bytes(docker_report.disk)),
             "disk": {
                 "images_size": docker_report.disk.images_size,
                 "images_reclaimable": docker_report.disk.images_reclaimable,
@@ -436,8 +468,28 @@ def report_to_dict(
                 "containers_reclaimable": docker_report.disk.containers_reclaimable,
                 "volumes_size": docker_report.disk.volumes_size,
                 "volumes_reclaimable": docker_report.disk.volumes_reclaimable,
+                "build_cache_size": docker_report.disk.build_cache_size,
                 "build_cache_reclaimable": docker_report.disk.build_cache_reclaimable,
             },
+            "cleanup_suggestions": [
+                {
+                    "severity": s.severity,
+                    "title": s.title,
+                    "command": s.command,
+                    "description": s.description,
+                }
+                for s in cleanup_suggestions(docker_report, docker_cfg or {})
+            ],
+            "dangling_images": [
+                {
+                    "repository": img.repository,
+                    "tag": img.tag,
+                    "id": img.id,
+                    "size": img.size,
+                    "created_since": img.created_since,
+                }
+                for img in docker_report.dangling_images[:20]
+            ],
             "containers": [
                 {
                     "id": c.id,
@@ -570,7 +622,7 @@ def build_health_payload(config: dict, reports_dir: Path | None = None) -> dict:
         "source": "live",
         "report": report_to_dict(
             system, proc_report, port_report, log_report, docker_report,
-            top_report, diagnosis, java_report,
+            top_report, diagnosis, java_report, scan.get("docker_cfg"),
         ),
         "alerts": [alert_to_dict(a) for a in alerts],
         "verdict": build_verdict_dict(

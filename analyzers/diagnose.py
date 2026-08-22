@@ -7,6 +7,8 @@ Turns raw metrics into plain-English findings you can read aloud on a call.
 from dataclasses import dataclass, field
 from typing import Optional
 
+from collectors.docker import cleanup_suggestions, reclaimable_bytes
+
 
 @dataclass
 class Finding:
@@ -280,6 +282,38 @@ def diagnose(
                     say_this=f"{c.name} is stuck in a restart loop.",
                     next_step=f"docker logs --tail 100 {c.name}",
                 ))
+
+        reclaim_gb = reclaimable_bytes(docker_report.disk) / (1024 ** 3)
+        if reclaim_gb >= 5:
+            suggestions = cleanup_suggestions(docker_report)
+            top_cmd = suggestions[0].command if suggestions else "docker system prune -f"
+            findings.append(Finding(
+                severity="warning",
+                category="docker",
+                title=f"Docker using {reclaim_gb:.1f} GB reclaimable disk",
+                what=(
+                    f"Images {docker_report.disk.images_reclaimable}, "
+                    f"cache {docker_report.disk.build_cache_reclaimable}, "
+                    f"volumes {docker_report.disk.volumes_reclaimable} reclaimable."
+                ),
+                why_it_matters="Docker layers and cache fill root volume on build servers.",
+                say_this=(
+                    f"Docker has {reclaim_gb:.1f} GB we can reclaim — "
+                    "likely old images and build cache."
+                ),
+                next_step=top_cmd,
+            ))
+
+        if docker_report.dangling_count >= 5:
+            findings.append(Finding(
+                severity="warning",
+                category="docker",
+                title=f"{docker_report.dangling_count} dangling Docker images",
+                what="Untagged image layers left over from rebuilds.",
+                why_it_matters="Each rebuild can leave orphaned layers that accumulate.",
+                say_this=f"We have {docker_report.dangling_count} dangling images eating disk.",
+                next_step="docker image prune -f",
+            ))
 
     # ------------------------------------------------------------------ Processes / ports
     if proc_report:
