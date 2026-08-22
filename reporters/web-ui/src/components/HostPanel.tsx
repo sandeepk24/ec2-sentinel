@@ -274,47 +274,121 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
     }
 
     if (r.docker?.available) {
+      const docker = r.docker;
+      const disk = docker.disk;
+      const dangling = docker.dangling_count ?? 0;
+      const cacheReclaim = disk.build_cache_reclaimable ?? "0B";
+      const totalReclaim = docker.total_reclaimable ?? disk.images_reclaimable;
+      const suggestions = docker.cleanup_suggestions ?? [];
+      const dockerTone =
+        dangling >= 5 || suggestions.some((s) => s.severity === "warning")
+          ? "warn"
+          : docker.stopped_count > 0
+            ? "warn"
+            : "ok";
+      const dockerSummary =
+        dangling > 0
+          ? `${docker.running_count} up · ${dangling} dangling · ${totalReclaim} reclaimable`
+          : `${docker.running_count} up · ${docker.stopped_count} down · ${totalReclaim} reclaimable`;
+
       tiles.push({
         id: "docker",
         title: "Docker",
-        summary: `${r.docker.running_count} up · ${r.docker.stopped_count} down`,
+        summary: dockerSummary,
         icon: Container,
-        tone: r.docker.stopped_count > 0 ? "warn" : "ok",
+        tone: dockerTone,
         content: (
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <MiniStat label="Version" value={`v${r.docker.server_version}`} small />
-              <MiniStat label="Running" value={String(r.docker.running_count)} />
-              <MiniStat label="Images" value={String(r.docker.image_count)} />
-              <MiniStat label="Reclaimable" value={r.docker.disk.images_reclaimable} small />
+              <MiniStat label="Version" value={`v${docker.server_version}`} small />
+              <MiniStat label="Running" value={String(docker.running_count)} />
+              <MiniStat
+                label="Dangling"
+                value={String(dangling)}
+                small={dangling >= 5}
+              />
+              <MiniStat label="Build cache" value={cacheReclaim} small />
             </div>
+
+            <DataTable
+              embedded
+              title="Disk usage"
+              headers={["Type", "Total", "Reclaimable"]}
+              rows={[
+                ["Images", disk.images_size, disk.images_reclaimable],
+                ["Containers", disk.containers_size, disk.containers_reclaimable],
+                ["Volumes", disk.volumes_size, disk.volumes_reclaimable],
+                [
+                  "Build cache",
+                  disk.build_cache_size ?? "—",
+                  disk.build_cache_reclaimable ?? "—",
+                ],
+              ]}
+              warnCol={2}
+            />
+
+            {suggestions.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider dash-heading">
+                  Cleanup suggestions
+                </h4>
+                <div className="space-y-2">
+                  {suggestions.map((s, i) => (
+                    <div
+                      key={i}
+                      className={`rounded-xl border px-4 py-3 ${
+                        s.severity === "warning"
+                          ? "border-amber-200/90 bg-amber-50/50 dark:border-amber-500/25 dark:bg-amber-950/30"
+                          : "border-indigo-100/80 bg-indigo-50/30 dark:border-white/10 dark:bg-white/[0.03]"
+                      }`}
+                    >
+                      <p className="text-sm font-semibold dash-title">{s.title}</p>
+                      <p className="mt-1 text-xs dash-subtle">{s.description}</p>
+                      <code className="mt-2 block rounded-lg bg-black/5 px-3 py-2 font-mono text-xs dark:bg-black/30">
+                        {s.command}
+                      </code>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="grid gap-4 lg:grid-cols-2">
               <DataTable
                 embedded
                 title="Containers"
                 headers={["Name", "Image", "State", "Status"]}
-                rows={(r.docker.containers ?? []).map((c) => [
+                rows={(docker.containers ?? []).map((c) => [
                   c.name,
                   c.image.length > 24 ? c.image.slice(0, 24) + "…" : c.image,
                   c.state,
                   c.status.length > 36 ? c.status.slice(0, 36) + "…" : c.status,
                 ])}
                 rowClass={(rowIdx) => {
-                  const c = r.docker!.containers[rowIdx];
+                  const c = docker.containers[rowIdx];
                   return { stateCol: dockerStateColor(c.state, c.health) };
                 }}
                 statusCol={2}
               />
               <DataTable
                 embedded
-                title="Images"
+                title={dangling > 0 ? `Dangling images (${dangling})` : "Images"}
                 headers={["Repository", "Tag", "Size", "Age"]}
-                rows={(r.docker.images ?? []).map((img) => [
-                  img.repository,
-                  img.tag,
-                  img.size,
-                  img.created_since || "—",
-                ])}
+                rows={
+                  dangling > 0
+                    ? (docker.dangling_images ?? []).map((img) => [
+                        img.repository,
+                        img.tag,
+                        img.size,
+                        img.created_since || "—",
+                      ])
+                    : (docker.images ?? []).map((img) => [
+                        img.repository,
+                        img.tag,
+                        img.size,
+                        img.created_since || "—",
+                      ])
+                }
               />
             </div>
           </div>

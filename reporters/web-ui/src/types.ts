@@ -102,6 +102,8 @@ export interface Report {
     running_count: number;
     stopped_count: number;
     image_count: number;
+    dangling_count: number;
+    total_reclaimable: string;
     disk: {
       images_size: string;
       images_reclaimable: string;
@@ -109,8 +111,22 @@ export interface Report {
       containers_reclaimable: string;
       volumes_size: string;
       volumes_reclaimable: string;
+      build_cache_size: string;
       build_cache_reclaimable: string;
     };
+    cleanup_suggestions: Array<{
+      severity: "info" | "warning";
+      title: string;
+      command: string;
+      description: string;
+    }>;
+    dangling_images: Array<{
+      repository: string;
+      tag: string;
+      id: string;
+      size: string;
+      created_since: string;
+    }>;
     containers: Array<{
       id: string;
       name: string;
