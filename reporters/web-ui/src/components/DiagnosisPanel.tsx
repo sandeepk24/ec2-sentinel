@@ -1,8 +1,9 @@
 import { motion } from "framer-motion";
-import { AlertCircle, Cpu, MemoryStick, MessageCircle } from "lucide-react";
+import { AlertCircle, Cpu, Lightbulb, MemoryStick, MessageCircle } from "lucide-react";
 import type { Diagnosis, Report, TopProcess } from "../types";
 import { fmtBytes } from "../utils";
 import { TileGrid, type TileDefinition } from "./CollapsibleTile";
+import { SuggestionCards } from "./SuggestionCards";
 
 function StackBar({
   segments,
@@ -93,6 +94,7 @@ export function DiagnosisPanel({ report }: { report: Report }) {
         : "bg-emerald-100 text-emerald-800 ring-emerald-200 dark:bg-emerald-500/25 dark:text-emerald-100 dark:ring-emerald-400/50";
 
   const findings = d.findings.filter((f) => f.severity !== "ok");
+  const suggestions = d.suggestions ?? [];
   const topCpu = top?.by_cpu?.[0];
   const topMem = top?.by_memory?.[0];
   const breakdownSummary = [
@@ -106,6 +108,25 @@ export function DiagnosisPanel({ report }: { report: Report }) {
     d.health === "critical" ? "crit" : d.health === "degraded" ? "warn" : "neutral";
 
   const diagTiles: TileDefinition[] = [];
+
+  if (suggestions.length > 0) {
+    const warnCount = suggestions.filter((s) => s.severity !== "info").length;
+    diagTiles.push({
+      id: "suggestions",
+      title: "Suggested actions",
+      summary:
+        warnCount > 0
+          ? `${warnCount} fix${warnCount === 1 ? "" : "es"} · pinpoint apps`
+          : `${suggestions.length} tip${suggestions.length === 1 ? "" : "s"}`,
+      icon: Lightbulb,
+      tone: suggestions.some((s) => s.severity === "critical")
+        ? "crit"
+        : warnCount > 0
+          ? "warn"
+          : "neutral",
+      content: <SuggestionCards suggestions={suggestions} />,
+    });
+  }
 
   if (d.talk_track.length > 0) {
     diagTiles.push({
@@ -274,7 +295,13 @@ export function DiagnosisPanel({ report }: { report: Report }) {
   }
 
   const defaultDiagId =
-    findings.length > 0 ? "findings" : d.health === "degraded" || d.health === "critical" ? "breakdown" : null;
+    suggestions.length > 0
+      ? "suggestions"
+      : findings.length > 0
+        ? "findings"
+        : d.health === "degraded" || d.health === "critical"
+          ? "breakdown"
+          : null;
 
   return (
     <div className="space-y-4">

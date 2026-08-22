@@ -25,6 +25,16 @@ export interface Finding {
   next_step: string;
 }
 
+export interface ActionSuggestion {
+  severity: "info" | "warning" | "critical";
+  category: string;
+  title: string;
+  command: string;
+  description: string;
+  process_name?: string;
+  pid?: number | null;
+}
+
 export interface Diagnosis {
   headline: string;
   summary: string;
@@ -32,6 +42,7 @@ export interface Diagnosis {
   cpu_story: string;
   memory_story: string;
   talk_track: string[];
+  suggestions?: ActionSuggestion[];
   findings: Finding[];
 }
 
