@@ -56,14 +56,22 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE
           python -c "
-          from collectors.system import collect_system
+          from collectors.system import collect_system, collect_os_info, collect_ec2_metadata
           report = collect_system()
           print(f'CPU: {report.cpu.usage_percent}%')
           print(f'Memory: {report.memory.used_percent}%')
           print(f'Disks: {len(report.disks)}')
           print(f'Uptime: {report.uptime_human}')
+          print(f'OS: {report.os.display}')
+          print(f'Instance type: {report.ec2.instance_type} ({report.ec2.cloud_provider}/{report.ec2.detection_source})')
           assert report.cpu.core_count > 0
           assert report.memory.total_bytes > 0
+          assert report.os.id != 'unknown' or report.os.platform != 'unknown'
+          assert report.ec2.instance_type != 'unknown'
+          osinfo = collect_os_info()
+          print(f'OS family={osinfo.family} id={osinfo.id} version={osinfo.version_id}')
+          meta = collect_ec2_metadata()
+          print(f'Meta source={meta.detection_source} type={meta.instance_type}')
           print('All system checks passed')
           "
 

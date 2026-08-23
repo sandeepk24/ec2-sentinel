@@ -79,11 +79,14 @@ def _fmt_bytes(b: int) -> str:
 
 def render_header(system: SystemReport) -> str:
     ec2 = system.ec2
+    osinfo = system.os
     lines = [
         f"\n{C.BOLD}{'━' * 50}{C.RESET}",
         f"  {C.BOLD}{C.CYAN}EC2 SENTINEL{C.RESET} — Health Report",
         f"  Host: {C.BOLD}{ec2.hostname}{C.RESET}   Instance: {ec2.instance_id}",
-        f"  Region: {ec2.region}    Type: {ec2.instance_type}",
+        f"  Region: {ec2.region}    Type: {C.BOLD}{ec2.instance_type}{C.RESET}"
+        f"  ({ec2.cloud_provider}/{ec2.detection_source or 'n/a'})",
+        f"  OS: {C.BOLD}{osinfo.display}{C.RESET}",
         f"  Scan time: {system.timestamp}",
         f"{C.BOLD}{'━' * 50}{C.RESET}",
     ]
