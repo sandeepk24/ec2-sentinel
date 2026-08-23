@@ -61,8 +61,18 @@ export function HeaderBar({
             <span className="font-mono text-slate-700 dark:text-slate-300">{host.instance_id}</span>
             <span className="text-indigo-200 dark:text-slate-600">·</span>
             <span className="font-medium">
-              {host.instance_type} · {host.region}
+              {host.instance_type}
+              {host.cloud_provider && host.cloud_provider !== "unknown"
+                ? ` (${host.cloud_provider})`
+                : ""}{" "}
+              · {host.region}
             </span>
+            {host.os?.display && (
+              <>
+                <span className="text-indigo-200 dark:text-slate-600">·</span>
+                <span className="font-medium text-slate-700 dark:text-slate-300">{host.os.display}</span>
+              </>
+            )}
             {scannedAt && (
               <>
                 <span className="text-indigo-200 dark:text-slate-600">·</span>

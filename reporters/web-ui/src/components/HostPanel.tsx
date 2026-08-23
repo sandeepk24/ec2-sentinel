@@ -483,7 +483,11 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
           <span className="text-sm dash-subtle">{host.filename}</span>
         )}
         <span className="text-sm dash-subtle">
-          {h.instance_id} · {h.instance_type} · {h.region}
+          {h.instance_type}
+          {h.cloud_provider && h.cloud_provider !== "unknown" ? ` · ${h.cloud_provider}` : ""}
+          {" · "}
+          {h.region}
+          {h.os?.name && h.os.name !== "unknown" ? ` · ${h.os.name}` : ""}
         </span>
       </div>
 

@@ -3,7 +3,24 @@ export interface HostInfo {
   instance_id: string;
   instance_type: string;
   region: string;
+  availability_zone?: string;
+  ami_id?: string;
+  cloud_provider?: string;
+  detection_source?: string;
   uptime_seconds: number;
+  os?: {
+    name: string;
+    id: string;
+    id_like: string;
+    version: string;
+    version_id: string;
+    version_codename: string;
+    family: string;
+    kernel: string;
+    arch: string;
+    platform: string;
+    display: string;
+  };
 }
 
 export interface TopProcess {
