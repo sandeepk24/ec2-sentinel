@@ -16,11 +16,14 @@ EC2 Sentinel runs on the instance and gives you that answer in one place. Less t
 
 - **CPU, memory, disk, swap** — usage, load, and what's consuming resources
 - **Top offenders** — ranks the biggest CPU and memory hogs (~1s sample, like `top`)
+- **Suggested actions** — names the hot process (pid + %) and gives copy-paste commands (`top -H`, `jstack`, `du`, `docker prune`)
 - **Processes** — is Jenkins / Bamboo / Tomcat / JBoss actually running? Did it restart?
 - **Java / JVM** — installed JDK/JRE versions plus running Java processes (like `ps -ef | grep java`)
+- **Docker** — containers, images, dangling layers, build cache, and disk reclaimable space with cleanup tips
 - **Ports** — is the service listening on the port you expect?
 - **Logs** — scans for OOM, disk full, CRITICAL/FATAL patterns
 - **Plain-English diagnosis** — a short "why is this slow?" summary for the team
+- **Auto-detected host info** — Linux distro/version (Ubuntu, Amazon Linux, RHEL, …), EC2 instance type, region, and cloud provider
 - **Alerts** — Slack, email, PagerDuty, or JSON to stdout
 
 Runs locally on the instance. No AWS API keys. No central server required.
@@ -29,6 +32,9 @@ Runs locally on the instance. No AWS API keys. No central server required.
 
 ## What's new
 
+- **OS & instance auto-detection** — reads `/etc/os-release` for distro flavor/version and resolves instance type via IMDSv2, IMDSv1, or cloud-init (works across Amazon Linux, Ubuntu, RHEL, Rocky, and local dev hosts)
+- **Pinpointed resource suggestions** — diagnosis panel names the top CPU/memory offender and suggests runnable fixes (thread dumps for Java, `du` for full disks, `disk-cleanup.sh`, Docker prune commands)
+- **Docker disk waste reporting** — dashboard shows build cache, dangling images, reclaimable space, and severity-ranked cleanup commands
 - **Running Java processes** — lists every JVM on the box (PID, binary, command line), like `ps -ef | grep java`, even when no JDK is installed
 - **Top CPU/memory panel** — dashboard shows which processes are eating the instance, with a plain-English explanation
 - **5-minute refresh** — dashboard polls every 5 minutes; older configs using 30/60s intervals upgrade to 5 minutes on load
@@ -39,10 +45,10 @@ Runs locally on the instance. No AWS API keys. No central server required.
 
 | | |
 |---|---|
-| **OS** | Linux on EC2 — Amazon Linux 2/2023, Ubuntu 20.04+, RHEL 8+ |
+| **OS** | Linux on EC2 — Amazon Linux 2/2023, Ubuntu 20.04+, RHEL 8+, Rocky, Alma, Debian (auto-detected via `/etc/os-release`) |
 | **Python** | 3.9+ with `pip` |
 | **Dependencies** | One package: `PyYAML` (everything else is Python stdlib + `/proc`) |
-| **AWS / IAM** | None — no API keys, no boto3, no CloudWatch agent |
+| **AWS / IAM** | None — no API keys, no boto3, no CloudWatch agent. Instance type/region from IMDS or cloud-init |
 | **Root** | Not required to run scans; `sudo` only if you install to `/opt` or use systemd |
 | **Disk / RAM** | Negligible — no database, no heavy agents |
 
@@ -96,10 +102,12 @@ Without `sudo`, the installer uses `~/.ec2-sentinel` instead of `/opt/ec2-sentin
 </p>
 
 <p align="center">
-  Live charts, process status, and a plain-English diagnosis — <a href="docs/dashboard-preview-dark.html">open preview →</a>
+  Live charts, process status, suggested actions, Docker cleanup tips, and a plain-English diagnosis — <a href="docs/dashboard-preview-dark.html">open preview →</a>
 </p>
 
 Auto-refreshes every 5 minutes. Manual refresh anytime. Built React UI — no Node needed at runtime.
+
+The dashboard header shows **auto-detected OS** (e.g. Ubuntu 22.04, Amazon Linux 2023) and **instance type** (e.g. `m5.xlarge`). The diagnosis panel includes a **Suggested actions** tile that pinpoints which app is burning CPU or memory and lists copy-paste commands to investigate or clean up.
 
 ---
 
@@ -141,16 +149,36 @@ alerts:
     webhook_url: "${SENTINEL_SLACK_WEBHOOK}"
 ```
 
-See `config.example.yaml` for thresholds, Docker checks, Java/JDK detection, and more.
+See `config.example.yaml` for thresholds, Docker checks (cache/dangling image alerts), Java/JDK detection, and more.
+
+**Docker thresholds** (optional):
+
+```yaml
+docker:
+  enabled: true
+  disk_reclaim_warn_gb: 5        # alert when reclaimable Docker disk exceeds this
+  cache_warn_gb: 2               # alert when build cache is large
+  dangling_warn_count: 5         # alert when untagged images pile up
+  images_warn_count: 50
+```
 
 ---
 
 ## How it works
 
-EC2 Sentinel is an **on-instance agent**. Install it on each EC2 you want to watch. It reads local `/proc`, log files, and port state — it does not SSH into other hosts or call AWS APIs.
+EC2 Sentinel is an **on-instance agent**. Install it on each EC2 you want to watch. It reads local `/proc`, log files, port state, and (optionally) the Docker CLI — it does not SSH into other hosts or call AWS APIs.
+
+On startup each scan auto-detects:
+
+| Signal | Source |
+|--------|--------|
+| Linux distro & version | `/etc/os-release` (fallback: `/etc/redhat-release`, etc.) |
+| Kernel & arch | `uname` / `/proc` |
+| EC2 instance type & region | IMDSv2 → IMDSv1 → cloud-init `instance-data.json` |
+| Top CPU/memory consumers | `/proc` sampling (~1s) |
 
 ```
-  install on instance  →  scan CPU / mem / disk / processes / ports / logs  →  terminal, web UI, or alert
+  install on instance  →  scan CPU / mem / disk / processes / ports / logs / docker  →  terminal, web UI, or alert
 ```
 
 **Monitor multiple instances:** run `ec2-sentinel --once --json` on each box (cron works well), sync the JSON files to one host, then:
