@@ -118,7 +118,16 @@ export interface Report {
     used_percent: number;
     used_bytes: number;
     total_bytes: number;
+    free_bytes?: number;
+    growth_gb_per_day?: number | null;
+    growth_rate_bytes_per_day?: number | null;
+    trend?: string;
+    days_until_80?: number | null;
+    days_until_90?: number | null;
+    days_until_95?: number | null;
     days_until_full: number | null;
+    predicted_full_date?: string | null;
+    growth_sample_count?: number;
   }>;
   top?: {
     by_cpu: TopProcess[];

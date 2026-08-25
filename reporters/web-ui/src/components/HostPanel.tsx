@@ -104,62 +104,129 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
     }
 
     if (visibleDisks.length > 0) {
+      const growing = visibleDisks.find(
+        (d) => d.trend === "growing" && d.growth_gb_per_day != null,
+      );
       tiles.push({
         id: "disk",
         title: "Disk",
-        summary: worstDisk
-          ? `${worstDisk.mount} ${worstDisk.used_percent}%`
-          : `${visibleDisks.length} mounts`,
+        summary: growing
+          ? `${growing.mount} ${growing.growth_gb_per_day! >= 0 ? "+" : ""}${growing.growth_gb_per_day} GB/d`
+          : worstDisk
+            ? `${worstDisk.mount} ${worstDisk.used_percent}%`
+            : `${visibleDisks.length} mounts`,
         icon: HardDrive,
         tone: diskTone as TileDefinition["tone"],
         content: (
-          <div className="overflow-x-auto rounded-xl border border-indigo-100/80 dark:border-white/10">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-indigo-50/50 text-left text-xs uppercase tracking-wider dash-subtle dark:bg-white/[0.03]">
-                  <th className="px-4 py-2.5 font-semibold">Mount</th>
-                  <th className="px-4 py-2.5 font-semibold">Used</th>
-                  <th className="px-4 py-2.5 font-semibold min-w-[140px]">Bar</th>
-                  <th className="px-4 py-2.5 font-semibold">Free</th>
-                </tr>
-              </thead>
-              <tbody>
+          <div className="space-y-4">
+            <div className="overflow-x-auto rounded-xl border border-indigo-100/80 dark:border-white/10">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-indigo-50/50 text-left text-xs uppercase tracking-wider dash-subtle dark:bg-white/[0.03]">
+                    <th className="px-4 py-2.5 font-semibold">Mount</th>
+                    <th className="px-4 py-2.5 font-semibold">Used</th>
+                    <th className="px-4 py-2.5 font-semibold min-w-[140px]">Bar</th>
+                    <th className="px-4 py-2.5 font-semibold">Free</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleDisks.map((d) => {
+                    const level = levelForPercent(
+                      d.used_percent,
+                      t.disk_warn ?? 75,
+                      t.disk_crit ?? 90,
+                    );
+                    return (
+                      <tr key={d.mount} className="dash-row-hover">
+                        <td className="px-4 py-3 font-mono font-semibold text-teal-800 dark:text-cyan-200/90">
+                          {d.mount}
+                        </td>
+                        <td
+                          className={`px-4 py-3 font-mono font-semibold ${levelStyles[level].text}`}
+                        >
+                          {d.used_percent}%
+                        </td>
+                        <td className="px-4 py-3">
+                          <ProgressBar
+                            pct={d.used_percent}
+                            warn={t.disk_warn ?? 75}
+                            crit={t.disk_crit ?? 90}
+                          />
+                        </td>
+                        <td className="px-4 py-3 dash-muted">
+                          {fmtBytes(d.free_bytes ?? d.total_bytes - d.used_bytes)}
+                          {d.days_until_full != null && (
+                            <span className="ml-2 text-amber-700 dark:text-amber-300/80">
+                              ~{Math.round(d.days_until_full)}d left
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {visibleDisks.some((d) => d.growth_gb_per_day != null || d.trend) && (
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider dash-heading">
+                  Growth forecast
+                </h4>
                 {visibleDisks.map((d) => {
-                  const level = levelForPercent(
-                    d.used_percent,
-                    t.disk_warn ?? 75,
-                    t.disk_crit ?? 90,
-                  );
+                  if (d.growth_gb_per_day == null && !d.trend) return null;
+                  const growing = d.trend === "growing";
                   return (
-                    <tr key={d.mount} className="dash-row-hover">
-                      <td className="px-4 py-3 font-mono font-semibold text-teal-800 dark:text-cyan-200/90">
-                        {d.mount}
-                      </td>
-                      <td
-                        className={`px-4 py-3 font-mono font-semibold ${levelStyles[level].text}`}
-                      >
-                        {d.used_percent}%
-                      </td>
-                      <td className="px-4 py-3">
-                        <ProgressBar
-                          pct={d.used_percent}
-                          warn={t.disk_warn ?? 75}
-                          crit={t.disk_crit ?? 90}
-                        />
-                      </td>
-                      <td className="px-4 py-3 dash-muted">
-                        {fmtBytes(d.total_bytes - d.used_bytes)}
-                        {d.days_until_full != null && (
-                          <span className="ml-2 text-amber-700 dark:text-amber-300/80">
-                            ~{Math.round(d.days_until_full)}d left
+                    <div
+                      key={`growth-${d.mount}`}
+                      className={`rounded-xl border px-4 py-3 ${
+                        growing && (d.days_until_90 ?? 999) < 14
+                          ? "border-amber-200/90 bg-amber-50/50 dark:border-amber-500/25 dark:bg-amber-950/30"
+                          : "border-indigo-100/80 bg-indigo-50/30 dark:border-white/10 dark:bg-white/[0.03]"
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <p className="font-mono text-sm font-semibold dash-title">{d.mount}</p>
+                        <p className="text-xs uppercase tracking-wider dash-subtle">
+                          {d.trend || "unknown"}
+                          {d.growth_gb_per_day != null && (
+                            <span className="ml-2 font-mono normal-case">
+                              {d.growth_gb_per_day >= 0 ? "+" : ""}
+                              {d.growth_gb_per_day} GB/day
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-3 text-xs dash-muted">
+                        {d.days_until_80 != null && (
+                          <span>
+                            80% ~<span className="font-mono">{Math.round(d.days_until_80)}d</span>
                           </span>
                         )}
-                      </td>
-                    </tr>
+                        {d.days_until_90 != null && (
+                          <span>
+                            90% ~<span className="font-mono">{Math.round(d.days_until_90)}d</span>
+                          </span>
+                        )}
+                        {d.days_until_95 != null && (
+                          <span>
+                            95% ~<span className="font-mono">{Math.round(d.days_until_95)}d</span>
+                          </span>
+                        )}
+                        {d.predicted_full_date && (
+                          <span>
+                            Full ~<span className="font-mono">{d.predicted_full_date}</span>
+                          </span>
+                        )}
+                        {d.growth_sample_count != null && d.growth_sample_count > 0 && (
+                          <span className="dash-subtle">n={d.growth_sample_count}</span>
+                        )}
+                      </div>
+                    </div>
                   );
                 })}
-              </tbody>
-            </table>
+              </div>
+            )}
           </div>
         ),
       });
