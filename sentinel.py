@@ -249,15 +249,39 @@ def generate_alerts(
             msg = f"{d.mount} at {d.used_percent}%"
             if d.days_until_full is not None:
                 msg += f" — predicted full in {d.days_until_full:.0f} days"
+            if d.predicted_full_date:
+                msg += f" ({d.predicted_full_date})"
+            if d.growth_gb_per_day is not None:
+                msg += f" · {d.growth_gb_per_day:+.2f} GB/day"
             alerts.append(Alert(
                 severity="critical", title=f"Disk Critical: {d.mount}",
                 message=msg, hostname=hostname, timestamp=now, source="system.disk",
             ))
         elif d.used_percent >= thresholds["disk_warn"]:
+            msg = f"{d.mount} at {d.used_percent}%"
+            if d.days_until_80 is not None:
+                msg += f" — ~{d.days_until_80:.0f}d to 80%"
+            if d.growth_gb_per_day is not None:
+                msg += f" · {d.growth_gb_per_day:+.2f} GB/day ({d.trend})"
             alerts.append(Alert(
                 severity="warning", title=f"Disk Warning: {d.mount}",
-                message=f"{d.mount} at {d.used_percent}%",
+                message=msg,
                 hostname=hostname, timestamp=now, source="system.disk",
+            ))
+        elif (
+            d.trend == "growing"
+            and d.days_until_90 is not None
+            and d.days_until_90 < 14
+            and d.used_percent < thresholds["disk_warn"]
+        ):
+            alerts.append(Alert(
+                severity="warning", title=f"Disk Filling Fast: {d.mount}",
+                message=(
+                    f"{d.mount} growing at {d.growth_gb_per_day:+.2f} GB/day — "
+                    f"~{d.days_until_90:.0f}d until 90%"
+                    + (f" · full ~{d.predicted_full_date}" if d.predicted_full_date else "")
+                ),
+                hostname=hostname, timestamp=now, source="system.disk.growth",
             ))
 
     # Missing processes
@@ -455,7 +479,16 @@ def report_to_dict(
                 "used_percent": d.used_percent,
                 "used_bytes": d.used_bytes,
                 "total_bytes": d.total_bytes,
+                "free_bytes": d.free_bytes,
+                "growth_gb_per_day": d.growth_gb_per_day,
+                "growth_rate_bytes_per_day": d.growth_rate_bytes_per_day,
+                "trend": d.trend,
+                "days_until_80": d.days_until_80,
+                "days_until_90": d.days_until_90,
+                "days_until_95": d.days_until_95,
                 "days_until_full": d.days_until_full,
+                "predicted_full_date": d.predicted_full_date,
+                "growth_sample_count": d.growth_sample_count,
             }
             for d in system.disks
         ],

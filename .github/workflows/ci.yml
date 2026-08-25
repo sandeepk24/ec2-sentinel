@@ -72,6 +72,18 @@ jobs:
           print(f'OS family={osinfo.family} id={osinfo.id} version={osinfo.version_id}')
           meta = collect_ec2_metadata()
           print(f'Meta source={meta.detection_source} type={meta.instance_type}')
+          from analyzers.disk_growth import predict_disk_growth
+          import time
+          total = 100 * 1024**3
+          now = time.time()
+          samples = [
+              {'ts': now - 2*86400, 'used_bytes': 40*1024**3, 'total_bytes': total},
+              {'ts': now, 'used_bytes': 50*1024**3, 'total_bytes': total},
+          ]
+          pred = predict_disk_growth(50*1024**3, total, samples)
+          assert pred.ready and pred.trend == 'growing'
+          assert pred.days_until_80 is not None and pred.predicted_full_date
+          print(f'Disk growth: {pred.growth_gb_per_day} GB/day · full {pred.predicted_full_date}')
           print('All system checks passed')
           "
 

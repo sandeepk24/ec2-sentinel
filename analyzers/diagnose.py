@@ -330,7 +330,15 @@ def diagnose(
                 severity="critical",
                 category="disk",
                 title=f"Disk almost full: {d.mount}",
-                what=f"{d.mount} at {d.used_percent}% ({_fmt_gb(d.free_bytes)} free).",
+                what=(
+                    f"{d.mount} at {d.used_percent}% ({_fmt_gb(d.free_bytes)} free)."
+                    + (
+                        f" Growing {d.growth_gb_per_day:+.2f} GB/day — "
+                        f"full ~{d.predicted_full_date or f'{d.days_until_full:.0f}d'}."
+                        if d.growth_gb_per_day is not None and d.trend == "growing"
+                        else ""
+                    )
+                ),
                 why_it_matters="Writes fail, logs stop, databases crash — classic outage.",
                 say_this=f"{d.mount} is {d.used_percent}% full — we need space now.",
                 next_step=(
@@ -342,6 +350,11 @@ def diagnose(
             msg = f"{d.mount} at {d.used_percent}%."
             if d.days_until_full is not None:
                 msg += f" Predicted full in ~{d.days_until_full:.0f} days."
+            if d.growth_gb_per_day is not None:
+                msg += (
+                    f" Trend {d.trend}: {d.growth_gb_per_day:+.2f} GB/day"
+                    f" (80% ~{d.days_until_80}d, 90% ~{d.days_until_90}d, 95% ~{d.days_until_95}d)."
+                )
             findings.append(Finding(
                 severity="warning",
                 category="disk",
@@ -352,6 +365,32 @@ def diagnose(
                 next_step=(
                     f"du -xh {d.mount} --max-depth=1 | sort -h | tail -15; "
                     "prune Docker/build caches and rotated logs."
+                ),
+            ))
+        elif (
+            d.trend == "growing"
+            and d.days_until_90 is not None
+            and d.days_until_90 < 21
+        ):
+            findings.append(Finding(
+                severity="warning",
+                category="disk",
+                title=f"Disk growing fast: {d.mount}",
+                what=(
+                    f"{d.mount} at {d.used_percent}% but climbing "
+                    f"{d.growth_gb_per_day:+.2f} GB/day — "
+                    f"~{d.days_until_80}d to 80%, ~{d.days_until_90}d to 90%, "
+                    f"~{d.days_until_95}d to 95%"
+                    + (f", full ~{d.predicted_full_date}." if d.predicted_full_date else ".")
+                ),
+                why_it_matters="Growth rate matters more than current % on build servers.",
+                say_this=(
+                    f"{d.mount} will hit 90% in about {d.days_until_90:.0f} days "
+                    f"at the current growth rate."
+                ),
+                next_step=(
+                    f"Identify large dirs on {d.mount}; schedule cleanup before "
+                    f"{d.predicted_full_date or 'it fills'}."
                 ),
             ))
 

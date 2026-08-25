@@ -164,8 +164,29 @@ def render_disks(system: SystemReport, thresholds: dict) -> str:
             f"  {_status_icon(not crit, warn)}"
         )
 
-        if d.days_until_full is not None and d.days_until_full < 30:
-            connector = "│ " if i < len(disks) - 1 else "  "
+        connector = "│ " if i < len(disks) - 1 else "  "
+        if d.growth_gb_per_day is not None:
+            trend = d.trend or "unknown"
+            color = C.RED if trend == "growing" and (d.days_until_full or 999) < 14 else (
+                C.YELLOW if trend == "growing" else C.DIM
+            )
+            growth_line = (
+                f"  {connector} {color}↳ Trend {trend}: {d.growth_gb_per_day:+.2f} GB/day"
+            )
+            milestones = []
+            if d.days_until_80 is not None:
+                milestones.append(f"80% ~{d.days_until_80:.0f}d")
+            if d.days_until_90 is not None:
+                milestones.append(f"90% ~{d.days_until_90:.0f}d")
+            if d.days_until_95 is not None:
+                milestones.append(f"95% ~{d.days_until_95:.0f}d")
+            if milestones:
+                growth_line += f" · {' · '.join(milestones)}"
+            if d.predicted_full_date and d.trend == "growing":
+                growth_line += f" · full ~{d.predicted_full_date}"
+            growth_line += f"{C.RESET}"
+            lines.append(growth_line)
+        elif d.days_until_full is not None and d.days_until_full < 30:
             color = C.RED if d.days_until_full < 7 else C.YELLOW
             lines.append(
                 f"  {connector} {color}↳ Predicted full in {d.days_until_full:.0f} days "
@@ -173,7 +194,6 @@ def render_disks(system: SystemReport, thresholds: dict) -> str:
             )
 
         if d.inode_used_percent > 85:
-            connector = "│ " if i < len(disks) - 1 else "  "
             lines.append(
                 f"  {connector} {C.YELLOW}↳ Inode usage: {d.inode_used_percent}%{C.RESET}"
             )
