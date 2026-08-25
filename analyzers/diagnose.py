@@ -60,6 +60,7 @@ def diagnose(
     port_report=None,
     log_report=None,
     thresholds: Optional[dict] = None,
+    cpu_anomaly=None,
 ) -> Diagnosis:
     """Build a human diagnosis from collected reports."""
     t = thresholds or {}
@@ -201,6 +202,37 @@ def diagnose(
                 if cpu_offender
                 else "Check top CPU consumers before it hits critical."
             ),
+        ))
+
+    # ------------------------------------------------------------------ CPU anomaly (baseline)
+    if cpu_anomaly and getattr(cpu_anomaly, "is_anomaly", False):
+        offenders = getattr(cpu_anomaly, "offenders", []) or []
+        if offenders:
+            o = offenders[0]
+            offender_txt = f"{o.name} (pid {o.pid}, {o.cpu_percent}% CPU)"
+            next_step = f"top -H -p {o.pid}  # investigate {o.name}"
+        else:
+            offender_txt = "see top CPU list"
+            next_step = "Review top CPU processes; compare to this host's usual load."
+        findings.append(Finding(
+            severity=getattr(cpu_anomaly, "severity", "warning") or "warning",
+            category="cpu",
+            title=(
+                f"Unusual CPU spike vs baseline "
+                f"({cpu_anomaly.current_percent}% now, "
+                f"baseline {cpu_anomaly.baseline_percent}%)"
+            ),
+            what=cpu_anomaly.reason,
+            why_it_matters=(
+                "Static thresholds miss host-specific spikes — a quiet box jumping "
+                "from 20% to 70% is often a runaway job even if under 80%."
+            ),
+            say_this=(
+                f"CPU is {cpu_anomaly.current_percent}% versus a recent baseline of "
+                f"{cpu_anomaly.baseline_percent}% on this host — unusual. "
+                f"Likely offender: {offender_txt}."
+            ),
+            next_step=next_step,
         ))
 
     # ------------------------------------------------------------------ Memory

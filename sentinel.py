@@ -27,6 +27,7 @@ import yaml
 
 from alerts import Alert, dispatch_alerts
 from analyzers.diagnose import diagnose, diagnosis_to_dict
+from analyzers.cpu_anomaly import detect_cpu_anomaly, cpu_anomaly_to_dict
 from collectors.docker import (
     collect_docker,
     reclaimable_bytes,
@@ -162,12 +163,18 @@ def get_java_config(config: dict) -> dict:
     return config.get("java", {"enabled": True})
 
 
+def get_anomaly_config(config: dict) -> dict:
+    """CPU anomaly detection config — enabled by default."""
+    return config.get("anomaly", {"cpu": {"enabled": True}})
+
+
 # ---------------------------------------------------------------------------
 # Alert generation
 # ---------------------------------------------------------------------------
 
 def generate_alerts(
     system, proc_report, port_report, log_report, docker_report, thresholds, hostname, docker_cfg,
+    cpu_anomaly=None,
 ) -> list[Alert]:
     """Evaluate all reports against thresholds, produce alerts."""
     alerts = []
@@ -195,6 +202,22 @@ def generate_alerts(
             message=f"Steal time at {system.cpu.steal_percent}% — "
                     "possible T-series credit exhaustion or noisy neighbor",
             hostname=hostname, timestamp=now, source="system.cpu",
+        ))
+
+    # CPU anomaly vs host baseline (independent of static thresholds)
+    if cpu_anomaly and getattr(cpu_anomaly, "is_anomaly", False):
+        offenders = getattr(cpu_anomaly, "offenders", []) or []
+        offender_bit = ""
+        if offenders:
+            o = offenders[0]
+            offender_bit = f" Top process: {o.name} pid {o.pid} ({o.cpu_percent}% CPU)."
+        alerts.append(Alert(
+            severity=getattr(cpu_anomaly, "severity", "warning") or "warning",
+            title="CPU Anomaly vs Host Baseline",
+            message=(
+                f"{cpu_anomaly.reason}{offender_bit}"
+            ),
+            hostname=hostname, timestamp=now, source="system.cpu.anomaly",
         ))
 
     # Memory
@@ -352,11 +375,13 @@ def generate_alerts(
 def report_to_dict(
     system, proc_report, port_report, log_report, docker_report,
     top_report=None, diagnosis=None, java_report=None, docker_cfg=None,
+    cpu_anomaly=None,
 ) -> dict:
     """Convert all reports to a JSON-serializable dict."""
     top_report = top_report or collect_top(limit=8, sample_seconds=0.5)
     diagnosis = diagnosis or diagnose(
         system, top_report, docker_report, proc_report, port_report, log_report,
+        cpu_anomaly=cpu_anomaly,
     )
 
     def _top_list(rows):
@@ -440,6 +465,21 @@ def report_to_dict(
             "sample_seconds": top_report.sample_seconds,
         },
         "diagnosis": diagnosis_to_dict(diagnosis),
+        "cpu_anomaly": cpu_anomaly_to_dict(cpu_anomaly) if cpu_anomaly is not None else {
+            "enabled": False,
+            "is_anomaly": False,
+            "ready": False,
+            "reason": "",
+            "current_percent": 0.0,
+            "baseline_percent": 0.0,
+            "baseline_stddev": 0.0,
+            "delta_percent": 0.0,
+            "z_score": 0.0,
+            "sample_count": 0,
+            "severity": "info",
+            "detected_at": "",
+            "offenders": [],
+        },
         "processes": [
             {
                 "name": p.name,
@@ -596,13 +636,18 @@ def run_scan(config: dict) -> dict:
     docker_report = collect_docker(docker_cfg)
     java_report = collect_java(java_cfg)
     top_report = collect_top(limit=8, sample_seconds=1.0)
+    anomaly_cfg = get_anomaly_config(config)
+    cpu_anomaly = detect_cpu_anomaly(
+        system.cpu.usage_percent, top_report, anomaly_cfg,
+    )
     diagnosis = diagnose(
-        system, top_report, docker_report, proc_report, port_report, log_report, thresholds,
+        system, top_report, docker_report, proc_report, port_report, log_report,
+        thresholds, cpu_anomaly,
     )
     hostname = config.get("sentinel", {}).get("hostname_override", system.ec2.hostname)
     alerts = generate_alerts(
         system, proc_report, port_report, log_report, docker_report,
-        thresholds, hostname, docker_cfg,
+        thresholds, hostname, docker_cfg, cpu_anomaly,
     )
 
     return {
@@ -613,6 +658,7 @@ def run_scan(config: dict) -> dict:
         "docker_report": docker_report,
         "java_report": java_report,
         "top_report": top_report,
+        "cpu_anomaly": cpu_anomaly,
         "diagnosis": diagnosis,
         "docker_cfg": docker_cfg,
         "thresholds": thresholds,
@@ -640,6 +686,7 @@ def build_health_payload(config: dict, reports_dir: Path | None = None) -> dict:
         "report": report_to_dict(
             system, proc_report, port_report, log_report, docker_report,
             top_report, diagnosis, java_report, scan.get("docker_cfg"),
+            scan.get("cpu_anomaly"),
         ),
         "alerts": [alert_to_dict(a) for a in alerts],
         "verdict": build_verdict_dict(
@@ -685,7 +732,8 @@ def run_once(config: dict, output_json: bool = False) -> int:
     if output_json:
         data = report_to_dict(
             system, proc_report, port_report, log_report, docker_report,
-            top_report, diagnosis, java_report,
+            top_report, diagnosis, java_report, scan.get("docker_cfg"),
+            scan.get("cpu_anomaly"),
         )
         print(json.dumps(data, indent=2))
     else:
@@ -757,9 +805,13 @@ def run_watch(config: dict) -> None:
         docker_report = collect_docker(docker_cfg)
         java_report = collect_java(java_cfg)
         top_report = collect_top(limit=8, sample_seconds=1.0)
+        anomaly_cfg = get_anomaly_config(config)
+        cpu_anomaly = detect_cpu_anomaly(
+            system.cpu.usage_percent, top_report, anomaly_cfg,
+        )
         diagnosis = diagnose(
             system, top_report, docker_report, proc_report, port_report,
-            log_report, thresholds,
+            log_report, thresholds, cpu_anomaly,
         )
 
         print(render_full_report(
@@ -772,7 +824,7 @@ def run_watch(config: dict) -> None:
         hostname = config.get("sentinel", {}).get("hostname_override", system.ec2.hostname)
         alerts = generate_alerts(
             system, proc_report, port_report, log_report, docker_report,
-            thresholds, hostname, docker_cfg,
+            thresholds, hostname, docker_cfg, cpu_anomaly,
         )
         alert_cfg = config.get("alerts", {})
         if alerts and any(v.get("enabled") for v in alert_cfg.values()):
@@ -820,15 +872,19 @@ def run_daemon(config: dict) -> None:
             docker_report = collect_docker(docker_cfg)
             java_report = collect_java(java_cfg)
             top_report = collect_top(limit=8, sample_seconds=1.0)
+            anomaly_cfg = get_anomaly_config(config)
+            cpu_anomaly = detect_cpu_anomaly(
+                system.cpu.usage_percent, top_report, anomaly_cfg,
+            )
             diagnosis = diagnose(
                 system, top_report, docker_report, proc_report, port_report,
-                log_report, thresholds,
+                log_report, thresholds, cpu_anomaly,
             )
 
             hostname = config.get("sentinel", {}).get("hostname_override", system.ec2.hostname)
             alerts = generate_alerts(
                 system, proc_report, port_report, log_report, docker_report,
-                thresholds, hostname, docker_cfg,
+                thresholds, hostname, docker_cfg, cpu_anomaly,
             )
 
             if alerts:
@@ -845,7 +901,7 @@ def run_daemon(config: dict) -> None:
             logger.info(f"Diagnosis: {diagnosis.headline} — {diagnosis.summary}")
             data = report_to_dict(
                 system, proc_report, port_report, log_report, docker_report,
-                top_report, diagnosis, java_report,
+                top_report, diagnosis, java_report, docker_cfg, cpu_anomaly,
             )
             logger.debug(json.dumps(data))
 

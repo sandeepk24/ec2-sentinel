@@ -26,6 +26,18 @@ thresholds:
   swap_warn: 50                  # swap thrashing kills build servers
 
 # ---------------------------------------------------------------------------
+# Anomaly detection — compare metrics to this host's recent baseline
+# ---------------------------------------------------------------------------
+anomaly:
+  cpu:
+    enabled: true
+    max_samples: 72              # rolling window (~6h at 5-minute scans)
+    min_samples: 6               # need this many before judging anomalies
+    z_score: 2.0                 # spike if (current - mean) / stddev >= this
+    min_delta_percent: 20        # …or if absolute jump above mean is this large
+    min_current_percent: 35      # ignore "spikes" that are still quiet overall
+
+# ---------------------------------------------------------------------------
 # Docker — containers and images (auto-detected when docker CLI is available)
 # ---------------------------------------------------------------------------
 docker:

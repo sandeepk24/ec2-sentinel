@@ -115,6 +115,7 @@ jobs:
           from collectors.system import collect_system
           from collectors.top import collect_top
           from analyzers.diagnose import diagnose, diagnosis_to_dict
+          from analyzers.cpu_anomaly import detect_cpu_anomaly, HISTORY_FILE
           system = collect_system()
           top = collect_top(limit=5, sample_seconds=0.5)
           d = diagnose(system, top)
@@ -123,6 +124,16 @@ jobs:
           print(d.summary)
           print(f'Top CPU: {len(top.by_cpu)}, Top MEM: {len(top.by_memory)}')
           print('Diagnosis works')
+          # Lightweight anomaly detector (history file)
+          if HISTORY_FILE.exists():
+              HISTORY_FILE.unlink()
+          for v in [18, 20, 19, 21, 22, 20]:
+              detect_cpu_anomaly(v, top)
+          spike = detect_cpu_anomaly(75.0, top)
+          assert spike.ready and spike.is_anomaly
+          assert spike.baseline_percent < spike.current_percent
+          assert spike.reason
+          print(f'Anomaly OK: {spike.reason[:80]}')
           "
 
       - name: Smoke test — log scanner
