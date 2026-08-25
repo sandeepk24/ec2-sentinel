@@ -63,6 +63,27 @@ export interface Diagnosis {
   findings: Finding[];
 }
 
+export interface CpuAnomaly {
+  enabled: boolean;
+  is_anomaly: boolean;
+  ready: boolean;
+  reason: string;
+  current_percent: number;
+  baseline_percent: number;
+  baseline_stddev: number;
+  delta_percent: number;
+  z_score: number;
+  sample_count: number;
+  severity: "info" | "warning" | "critical";
+  detected_at: string;
+  offenders: Array<{
+    pid: number;
+    name: string;
+    cmdline: string;
+    cpu_percent: number;
+  }>;
+}
+
 export interface Report {
   timestamp: string;
   host: HostInfo;
@@ -105,6 +126,7 @@ export interface Report {
     sample_seconds: number;
   };
   diagnosis?: Diagnosis;
+  cpu_anomaly?: CpuAnomaly;
   processes: Array<{
     name: string;
     status: string;

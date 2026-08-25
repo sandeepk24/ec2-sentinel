@@ -1,9 +1,88 @@
 import { motion } from "framer-motion";
-import { AlertCircle, Cpu, Lightbulb, MemoryStick, MessageCircle } from "lucide-react";
-import type { Diagnosis, Report, TopProcess } from "../types";
+import { Activity, AlertCircle, Cpu, Lightbulb, MemoryStick, MessageCircle } from "lucide-react";
+import type { CpuAnomaly, Diagnosis, Report, TopProcess } from "../types";
 import { fmtBytes } from "../utils";
 import { TileGrid, type TileDefinition } from "./CollapsibleTile";
 import { SuggestionCards } from "./SuggestionCards";
+
+function AnomalyPanel({ anomaly }: { anomaly: CpuAnomaly }) {
+  const tone =
+    anomaly.is_anomaly && anomaly.severity === "critical"
+      ? "border-rose-200/90 bg-rose-50/50 dark:border-rose-500/25 dark:bg-rose-950/30"
+      : anomaly.is_anomaly
+        ? "border-amber-200/90 bg-amber-50/50 dark:border-amber-500/25 dark:bg-amber-950/30"
+        : "border-indigo-100/80 bg-indigo-50/30 dark:border-white/10 dark:bg-white/[0.03]";
+
+  return (
+    <div className="space-y-4">
+      <div className={`rounded-xl border px-4 py-3 ${tone}`}>
+        <p className="text-sm font-semibold dash-title">
+          {anomaly.is_anomaly ? "Unusual CPU vs this host's baseline" : "CPU within host baseline"}
+        </p>
+        <p className="mt-1 text-sm dash-subtle">{anomaly.reason || "Collecting samples…"}</p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-xl border border-indigo-100/80 bg-white/60 px-3 py-2 dark:border-white/10 dark:bg-white/[0.03]">
+          <p className="text-[10px] font-bold uppercase tracking-wider dash-subtle">Current</p>
+          <p className="mt-1 font-mono text-lg font-bold dash-title">{anomaly.current_percent}%</p>
+        </div>
+        <div className="rounded-xl border border-indigo-100/80 bg-white/60 px-3 py-2 dark:border-white/10 dark:bg-white/[0.03]">
+          <p className="text-[10px] font-bold uppercase tracking-wider dash-subtle">Baseline</p>
+          <p className="mt-1 font-mono text-lg font-bold dash-title">
+            {anomaly.baseline_percent}%
+            <span className="ml-1 text-xs font-normal dash-subtle">
+              ±{anomaly.baseline_stddev}
+            </span>
+          </p>
+        </div>
+        <div className="rounded-xl border border-indigo-100/80 bg-white/60 px-3 py-2 dark:border-white/10 dark:bg-white/[0.03]">
+          <p className="text-[10px] font-bold uppercase tracking-wider dash-subtle">Delta</p>
+          <p className="mt-1 font-mono text-lg font-bold dash-title">
+            {anomaly.delta_percent >= 0 ? "+" : ""}
+            {anomaly.delta_percent} pts
+          </p>
+        </div>
+        <div className="rounded-xl border border-indigo-100/80 bg-white/60 px-3 py-2 dark:border-white/10 dark:bg-white/[0.03]">
+          <p className="text-[10px] font-bold uppercase tracking-wider dash-subtle">Samples</p>
+          <p className="mt-1 font-mono text-lg font-bold dash-title">
+            {anomaly.sample_count}
+            {anomaly.z_score ? (
+              <span className="ml-1 text-xs font-normal dash-subtle">z={anomaly.z_score}</span>
+            ) : null}
+          </p>
+        </div>
+      </div>
+
+      {anomaly.offenders.length > 0 && (
+        <div>
+          <h4 className="mb-2 text-xs font-bold uppercase tracking-wider dash-heading">
+            Offending processes
+          </h4>
+          <div className="space-y-2">
+            {anomaly.offenders.slice(0, 5).map((o) => (
+              <div
+                key={o.pid}
+                className="flex items-center gap-3 rounded-lg border border-indigo-50/80 px-3 py-2 dark:border-white/5"
+              >
+                <span className="w-14 shrink-0 text-right font-mono text-sm font-bold text-teal-700 dark:text-cyan-300">
+                  {o.cpu_percent}%
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="truncate font-medium dash-title">{o.name}</span>
+                    <span className="shrink-0 font-mono text-xs dash-subtle">pid {o.pid}</span>
+                  </div>
+                  <p className="truncate font-mono text-xs dash-subtle">{o.cmdline || "—"}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function StackBar({
   segments,
@@ -95,6 +174,7 @@ export function DiagnosisPanel({ report }: { report: Report }) {
 
   const findings = d.findings.filter((f) => f.severity !== "ok");
   const suggestions = d.suggestions ?? [];
+  const anomaly = report.cpu_anomaly;
   const topCpu = top?.by_cpu?.[0];
   const topMem = top?.by_memory?.[0];
   const breakdownSummary = [
@@ -108,6 +188,25 @@ export function DiagnosisPanel({ report }: { report: Report }) {
     d.health === "critical" ? "crit" : d.health === "degraded" ? "warn" : "neutral";
 
   const diagTiles: TileDefinition[] = [];
+
+  if (anomaly?.enabled && (anomaly.is_anomaly || anomaly.ready || anomaly.sample_count > 0)) {
+    diagTiles.push({
+      id: "cpu-anomaly",
+      title: "CPU anomaly",
+      summary: anomaly.is_anomaly
+        ? `${anomaly.current_percent}% vs ${anomaly.baseline_percent}% baseline`
+        : anomaly.ready
+          ? `OK · baseline ${anomaly.baseline_percent}%`
+          : `Learning · ${anomaly.sample_count} samples`,
+      icon: Activity,
+      tone: anomaly.is_anomaly
+        ? anomaly.severity === "critical"
+          ? "crit"
+          : "warn"
+        : "ok",
+      content: <AnomalyPanel anomaly={anomaly} />,
+    });
+  }
 
   if (suggestions.length > 0) {
     const warnCount = suggestions.filter((s) => s.severity !== "info").length;
@@ -295,13 +394,17 @@ export function DiagnosisPanel({ report }: { report: Report }) {
   }
 
   const defaultDiagId =
-    suggestions.length > 0
-      ? "suggestions"
-      : findings.length > 0
-        ? "findings"
-        : d.health === "degraded" || d.health === "critical"
-          ? "breakdown"
-          : null;
+    anomaly?.is_anomaly
+      ? "cpu-anomaly"
+      : suggestions.length > 0
+        ? "suggestions"
+        : findings.length > 0
+          ? "findings"
+          : d.health === "degraded" || d.health === "critical"
+            ? "breakdown"
+            : anomaly?.enabled
+              ? "cpu-anomaly"
+              : null;
 
   return (
     <div className="space-y-4">
