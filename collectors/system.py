@@ -91,19 +91,21 @@ class DiskPartition:
     used_bytes: int
     free_bytes: int
     inode_used_percent: float
-    growth_rate_bytes_per_day: Optional[float] = None  # predicted from history
+    growth_rate_bytes_per_day: Optional[float] = None  # from rolling history
+    growth_gb_per_day: Optional[float] = None
+    trend: str = "unknown"  # growing | stable | shrinking | unknown
+    days_until_80: Optional[float] = None
+    days_until_90: Optional[float] = None
+    days_until_95: Optional[float] = None
+    days_until_full: Optional[float] = None
+    predicted_full_date: Optional[str] = None  # YYYY-MM-DD UTC
+    growth_sample_count: int = 0
 
     @property
     def used_percent(self) -> float:
         if self.total_bytes == 0:
             return 0.0
         return round((self.used_bytes / self.total_bytes) * 100, 1)
-
-    @property
-    def days_until_full(self) -> Optional[float]:
-        if self.growth_rate_bytes_per_day and self.growth_rate_bytes_per_day > 0:
-            return round(self.free_bytes / self.growth_rate_bytes_per_day, 1)
-        return None
 
 
 @dataclass
@@ -176,26 +178,21 @@ class SystemReport:
 
 
 # ---------------------------------------------------------------------------
-# History file for disk growth tracking
+# History file for disk growth tracking (delegates to analyzers.disk_growth)
 # ---------------------------------------------------------------------------
 
 DISK_HISTORY_FILE = Path("/tmp/ec2_sentinel_disk_history.json")
 
 
 def _load_disk_history() -> dict:
-    if DISK_HISTORY_FILE.exists():
-        try:
-            return json.loads(DISK_HISTORY_FILE.read_text())
-        except (json.JSONDecodeError, OSError):
-            return {}
-    return {}
+    """Backward-compatible loader used by older call sites / tests."""
+    from analyzers.disk_growth import load_disk_history
+    return load_disk_history()
 
 
 def _save_disk_history(history: dict) -> None:
-    try:
-        DISK_HISTORY_FILE.write_text(json.dumps(history))
-    except OSError:
-        pass  # best effort — /tmp might be read-only in edge cases
+    from analyzers.disk_growth import save_disk_history
+    save_disk_history(history)
 
 
 # ---------------------------------------------------------------------------
@@ -330,6 +327,12 @@ def collect_disks(mounts: Optional[list[str]] = None) -> list[DiskPartition]:
     now = time.time()
     partitions = []
 
+    from analyzers.disk_growth import (
+        predict_disk_growth,
+        record_disk_sample,
+        save_disk_history,
+    )
+
     for mount in unique_mounts:
         try:
             stat = os.statvfs(mount)
@@ -359,19 +362,8 @@ def collect_disks(mounts: Optional[list[str]] = None) -> list[DiskPartition]:
         except OSError:
             pass
 
-        # Disk growth prediction
-        growth_rate = None
-        key = mount
-        if key in history:
-            prev_used, prev_time = history[key]
-            elapsed = now - prev_time
-            if elapsed > 300:  # at least 5 minutes between samples
-                delta = used - prev_used
-                if delta > 0:
-                    growth_rate = (delta / elapsed) * 86400  # bytes per day
-
-        # Update history
-        history[key] = (used, now)
+        samples = record_disk_sample(history, mount, used, total, now=now)
+        prediction = predict_disk_growth(used, total, samples)
 
         partitions.append(DiskPartition(
             mount=mount,
@@ -380,10 +372,18 @@ def collect_disks(mounts: Optional[list[str]] = None) -> list[DiskPartition]:
             used_bytes=used,
             free_bytes=free,
             inode_used_percent=inode_used_pct,
-            growth_rate_bytes_per_day=growth_rate,
+            growth_rate_bytes_per_day=prediction.growth_rate_bytes_per_day,
+            growth_gb_per_day=prediction.growth_gb_per_day,
+            trend=prediction.trend,
+            days_until_80=prediction.days_until_80,
+            days_until_90=prediction.days_until_90,
+            days_until_95=prediction.days_until_95,
+            days_until_full=prediction.days_until_full,
+            predicted_full_date=prediction.predicted_full_date,
+            growth_sample_count=prediction.sample_count,
         ))
 
-    _save_disk_history(history)
+    save_disk_history(history)
     return partitions
 
 
