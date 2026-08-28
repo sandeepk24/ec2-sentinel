@@ -61,6 +61,7 @@ def diagnose(
     log_report=None,
     thresholds: Optional[dict] = None,
     cpu_anomaly=None,
+    java_report=None,
 ) -> Diagnosis:
     """Build a human diagnosis from collected reports."""
     t = thresholds or {}
@@ -472,6 +473,41 @@ def diagnose(
                 why_it_matters="Clients will fail even if a process appears running.",
                 say_this=f"Port {c.port} for {c.service_name} is closed.",
                 next_step="Check if the service crashed or is bound to the wrong interface.",
+            ))
+
+    # ------------------------------------------------------------------ Java / JVM
+    if java_report and java_report.enabled and java_report.processes:
+        for proc in java_report.processes:
+            jvm = proc.jvm
+            if not jvm or not jvm.issues:
+                continue
+            sev = "critical" if (
+                jvm.heap_pressure and (jvm.heap_used_percent or 0) >= 95
+                or (jvm.thread_count or 0) >= 1000
+            ) else "warning"
+            heap_txt = (
+                f"{jvm.heap_used_percent}% heap"
+                if jvm.heap_used_percent is not None
+                else "heap pressure"
+            )
+            findings.append(Finding(
+                severity=sev,
+                category="memory",
+                title=f"JVM stress: pid {proc.pid} ({proc.name})",
+                what="; ".join(jvm.issues),
+                why_it_matters=(
+                    "High heap, GC churn, or thread explosion causes latency, "
+                    "timeouts, and eventual OOM on Java services."
+                ),
+                say_this=(
+                    f"Java pid {proc.pid} shows {heap_txt}"
+                    + (f", {jvm.thread_count} threads" if jvm.thread_count else "")
+                    + (f", GC {jvm.gc_time_percent}% of uptime" if jvm.gc_time_percent else "")
+                    + "."
+                ),
+                next_step=(
+                    f"jcmd {proc.pid} GC.heap_info; jstack {proc.pid} | head -200"
+                ),
             ))
 
     # ------------------------------------------------------------------ Stories

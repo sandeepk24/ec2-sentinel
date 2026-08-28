@@ -393,6 +393,28 @@ def render_java(java_report: JavaReport) -> str:
                 f"  {prefix} pid {proc.pid} {name} {'.' * max(1, 10 - len(name))} "
                 f"{C.DIM}Java {ver}{C.RESET}"
             )
+            jvm = proc.jvm
+            if jvm and jvm.available:
+                connector = "│ " if i < min(len(java_report.processes), 5) - 1 else "  "
+                parts = []
+                if jvm.heap_used_percent is not None:
+                    hp_color = C.RED if jvm.heap_pressure else C.DIM
+                    parts.append(f"{hp_color}heap {jvm.heap_used_percent}%{C.RESET}")
+                if jvm.thread_count is not None:
+                    th_color = C.YELLOW if jvm.high_threads else C.DIM
+                    parts.append(f"{th_color}threads {jvm.thread_count}{C.RESET}")
+                if jvm.gc_time_percent is not None:
+                    gc_color = C.YELLOW if jvm.excessive_gc else C.DIM
+                    parts.append(f"{gc_color}GC {jvm.gc_time_percent}%{C.RESET}")
+                if jvm.uptime_seconds is not None:
+                    up_h = int(jvm.uptime_seconds // 3600)
+                    parts.append(f"{C.DIM}up {up_h}h{C.RESET}")
+                if parts:
+                    lines.append(f"  {connector} ↳ {' · '.join(parts)}")
+                if jvm.heap_config:
+                    lines.append(f"  {connector} {C.DIM}↳ {jvm.heap_config[:70]}{C.RESET}")
+                for issue in jvm.issues[:2]:
+                    lines.append(f"  {connector} {C.YELLOW}↳ {issue}{C.RESET}")
 
     return "\n".join(lines)
 

@@ -112,12 +112,18 @@ jobs:
         run: |
           python -c "
           from collectors.java import collect_java
-          report = collect_java({'enabled': True})
+          from collectors.jvm_stats import JavaJvmStats, _evaluate_stats, jvm_stats_to_dict
+          report = collect_java({'enabled': True, 'jvm_stats': False})
           print(f'Java enabled: {report.enabled}, available: {report.available}')
           for j in report.installations:
               print(f'  {j.display} @ {j.path}')
           if report.error and not report.available:
               print(f'Note: {report.error}')
+          s = JavaJvmStats(pid=1, heap_used_percent=92, thread_count=800)
+          _evaluate_stats(s, {'heap_warn_percent': 85, 'thread_warn': 500})
+          assert s.heap_pressure and s.high_threads
+          d = jvm_stats_to_dict(s)
+          assert 'heap_used_percent' in d and d['issues']
           print('Java collector works')
           "
 

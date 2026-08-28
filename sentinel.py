@@ -174,7 +174,7 @@ def get_anomaly_config(config: dict) -> dict:
 
 def generate_alerts(
     system, proc_report, port_report, log_report, docker_report, thresholds, hostname, docker_cfg,
-    cpu_anomaly=None,
+    cpu_anomaly=None, java_report=None, java_cfg=None,
 ) -> list[Alert]:
     """Evaluate all reports against thresholds, produce alerts."""
     alerts = []
@@ -282,6 +282,45 @@ def generate_alerts(
                     + (f" · full ~{d.predicted_full_date}" if d.predicted_full_date else "")
                 ),
                 hostname=hostname, timestamp=now, source="system.disk.growth",
+            ))
+
+    # Java / JVM health (jcmd)
+    if java_report and java_report.enabled and java_report.processes:
+        jcfg = java_cfg or {}
+        heap_crit = jcfg.get("heap_crit_percent", 95)
+        thread_crit = jcfg.get("thread_crit", 1000)
+        for proc in java_report.processes:
+            jvm = proc.jvm
+            if not jvm or not jvm.issues:
+                continue
+            sev = "critical" if (
+                (jvm.heap_used_percent or 0) >= heap_crit
+                or (jvm.thread_count or 0) >= thread_crit
+                or jvm.heap_pressure and (jvm.heap_used_percent or 0) >= heap_crit
+            ) else "warning"
+            if jvm.excessive_gc and not jvm.heap_pressure:
+                sev = "warning"
+            detail = "; ".join(jvm.issues)
+            heap_bit = (
+                f" heap {jvm.heap_used_percent}%"
+                if jvm.heap_used_percent is not None
+                else ""
+            )
+            thread_bit = (
+                f" threads {jvm.thread_count}"
+                if jvm.thread_count is not None
+                else ""
+            )
+            gc_bit = (
+                f" GC {jvm.gc_time_percent}%"
+                if jvm.gc_time_percent is not None
+                else ""
+            )
+            alerts.append(Alert(
+                severity=sev,
+                title=f"JVM Issue: pid {proc.pid}",
+                message=f"{proc.name}{heap_bit}{thread_bit}{gc_bit} — {detail}",
+                hostname=hostname, timestamp=now, source="java.jvm",
             ))
 
     # Missing processes
@@ -608,6 +647,20 @@ def report_to_dict(
 
 
 def _java_to_dict(java_report) -> dict:
+    from collectors.jvm_stats import jvm_stats_to_dict
+
+    def _proc_dict(p):
+        d = {
+            "pid": p.pid,
+            "name": p.name,
+            "java_path": p.java_path,
+            "version": p.version,
+            "cmdline": p.cmdline,
+        }
+        if p.jvm is not None:
+            d["jvm"] = jvm_stats_to_dict(p.jvm)
+        return d
+
     return {
         "enabled": java_report.enabled,
         "available": java_report.available,
@@ -616,6 +669,7 @@ def _java_to_dict(java_report) -> dict:
         "default_java": java_report.default_java,
         "installation_count": java_report.installation_count,
         "jdk_count": java_report.jdk_count,
+        "jvm_issue_count": java_report.jvm_issue_count,
         "installations": [
             {
                 "path": j.path,
@@ -629,16 +683,7 @@ def _java_to_dict(java_report) -> dict:
             }
             for j in java_report.installations
         ],
-        "processes": [
-            {
-                "pid": p.pid,
-                "name": p.name,
-                "java_path": p.java_path,
-                "version": p.version,
-                "cmdline": p.cmdline,
-            }
-            for p in java_report.processes
-        ],
+        "processes": [_proc_dict(p) for p in java_report.processes],
     }
 
 
@@ -675,12 +720,12 @@ def run_scan(config: dict) -> dict:
     )
     diagnosis = diagnose(
         system, top_report, docker_report, proc_report, port_report, log_report,
-        thresholds, cpu_anomaly,
+        thresholds, cpu_anomaly, java_report,
     )
     hostname = config.get("sentinel", {}).get("hostname_override", system.ec2.hostname)
     alerts = generate_alerts(
         system, proc_report, port_report, log_report, docker_report,
-        thresholds, hostname, docker_cfg, cpu_anomaly,
+        thresholds, hostname, docker_cfg, cpu_anomaly, java_report, java_cfg,
     )
 
     return {
@@ -844,7 +889,7 @@ def run_watch(config: dict) -> None:
         )
         diagnosis = diagnose(
             system, top_report, docker_report, proc_report, port_report,
-            log_report, thresholds, cpu_anomaly,
+            log_report, thresholds, cpu_anomaly, java_report,
         )
 
         print(render_full_report(
@@ -857,7 +902,7 @@ def run_watch(config: dict) -> None:
         hostname = config.get("sentinel", {}).get("hostname_override", system.ec2.hostname)
         alerts = generate_alerts(
             system, proc_report, port_report, log_report, docker_report,
-            thresholds, hostname, docker_cfg, cpu_anomaly,
+            thresholds, hostname, docker_cfg, cpu_anomaly, java_report, java_cfg,
         )
         alert_cfg = config.get("alerts", {})
         if alerts and any(v.get("enabled") for v in alert_cfg.values()):
@@ -911,13 +956,13 @@ def run_daemon(config: dict) -> None:
             )
             diagnosis = diagnose(
                 system, top_report, docker_report, proc_report, port_report,
-                log_report, thresholds, cpu_anomaly,
+                log_report, thresholds, cpu_anomaly, java_report,
             )
 
             hostname = config.get("sentinel", {}).get("hostname_override", system.ec2.hostname)
             alerts = generate_alerts(
                 system, proc_report, port_report, log_report, docker_report,
-                thresholds, hostname, docker_cfg, cpu_anomaly,
+                thresholds, hostname, docker_cfg, cpu_anomaly, java_report, java_cfg,
             )
 
             if alerts:
