@@ -60,7 +60,14 @@ docker:
 java:
   enabled: true                  # set false to skip Java checks entirely
   track_processes: true          # scan /proc for JVMs (like ps -ef | grep java)
+  jvm_stats: true                 # use jcmd/jstat for heap, GC, threads, uptime
   search_paths: []               # extra dirs to scan (default: /usr/lib/jvm, /opt, …)
+  heap_warn_percent: 85          # alert when heap used % exceeds this
+  heap_crit_percent: 95
+  thread_warn: 500               # alert when JVM thread count exceeds this
+  thread_crit: 1000
+  gc_time_warn_percent: 15       # alert when GC time % of uptime exceeds this
+  full_gc_warn: 10                # alert when full GC count exceeds this
 
 # ---------------------------------------------------------------------------
 # Processes — the services YOU care about on THIS server

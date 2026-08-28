@@ -15,6 +15,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from collectors.jvm_stats import JavaJvmStats, collect_jvm_stats
+
 
 DEFAULT_SEARCH_PATHS = [
     "/usr/bin",
@@ -49,6 +51,7 @@ class JavaProcess:
     java_path: Optional[str]
     version: Optional[str]
     cmdline: str
+    jvm: Optional["JavaJvmStats"] = None  # populated when jcmd available
 
 
 @dataclass
@@ -69,6 +72,10 @@ class JavaReport:
     @property
     def jdk_count(self) -> int:
         return sum(1 for j in self.installations if j.is_jdk)
+
+    @property
+    def jvm_issue_count(self) -> int:
+        return sum(len(p.jvm.issues) for p in self.processes if p.jvm and p.jvm.issues)
 
 
 def _parse_version_output(output: str) -> tuple[str, str, str]:
@@ -233,6 +240,8 @@ def _looks_like_java_process(cmdline: str, comm: str) -> bool:
 def _running_java_processes(
     installations: Optional[list[JavaInstallation]] = None,
     max_processes: int = 20,
+    java_home: Optional[str] = None,
+    java_cfg: Optional[dict] = None,
 ) -> list[JavaProcess]:
     version_by_path = {
         _resolve_real(j.path): j.version for j in (installations or [])
@@ -264,12 +273,19 @@ def _running_java_processes(
 
         exe = _proc_exe(pid)
         version = version_by_path.get(_resolve_real(exe)) if exe else None
+        jvm = None
+        cfg = java_cfg or {}
+        if cfg.get("jvm_stats", True) is not False:
+            jvm = collect_jvm_stats(
+                pid, exe, java_home, cmdline, java_cfg,
+            )
         results.append(JavaProcess(
             pid=pid,
             name=comm,
             java_path=exe,
             version=version,
             cmdline=cmdline[:200],
+            jvm=jvm,
         ))
 
     results.sort(key=lambda p: p.pid)
@@ -316,7 +332,11 @@ def collect_java(java_config: Optional[dict] = None) -> JavaReport:
 
     installations.sort(key=lambda j: (j.vendor, j.version, j.path))
 
-    processes = _running_java_processes(installations) if track_processes else []
+    processes = (
+        _running_java_processes(installations, java_home=java_home, java_cfg=cfg)
+        if track_processes
+        else []
+    )
 
     if not installations and not processes:
         return JavaReport(
