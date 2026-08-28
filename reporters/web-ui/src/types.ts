@@ -211,6 +211,7 @@ export interface Report {
     default_java: string | null;
     installation_count: number;
     jdk_count: number;
+    jvm_issue_count?: number;
     installations: Array<{
       path: string;
       version: string;
@@ -227,6 +228,26 @@ export interface Report {
       java_path: string | null;
       version: string | null;
       cmdline: string;
+      jvm?: {
+        available: boolean;
+        error: string;
+        source: string;
+        heap_used_bytes: number | null;
+        heap_max_bytes: number | null;
+        heap_used_percent: number | null;
+        heap_config: string;
+        young_gc_count: number | null;
+        full_gc_count: number | null;
+        gc_time_ms: number | null;
+        gc_time_percent: number | null;
+        thread_count: number | null;
+        uptime_seconds: number | null;
+        jvm_args: string;
+        heap_pressure: boolean;
+        excessive_gc: boolean;
+        high_threads: boolean;
+        issues: string[];
+      };
     }>;
   };
 }

@@ -272,20 +272,21 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
     }
 
     if (r.java?.enabled) {
+      const jvmIssues = r.java.jvm_issue_count ?? 0;
+      const hasJvmStress = r.java.processes.some(
+        (p) => p.jvm?.heap_pressure || p.jvm?.excessive_gc || p.jvm?.high_threads,
+      );
       tiles.push({
         id: "java",
         title: "Java",
         summary:
           !r.java.available && r.java.processes.length === 0
             ? "None"
-            : `${r.java.processes.length} JVM · ${r.java.installation_count} RT`,
+            : jvmIssues > 0
+              ? `${r.java.processes.length} JVM · ${jvmIssues} issue${jvmIssues === 1 ? "" : "s"}`
+              : `${r.java.processes.length} JVM · ${r.java.installation_count} RT`,
         icon: Coffee,
-        tone:
-          r.java.processes.length > 0
-            ? "neutral"
-            : r.java.available
-              ? "ok"
-              : "warn",
+        tone: hasJvmStress ? "warn" : r.java.processes.length > 0 ? "neutral" : r.java.available ? "ok" : "warn",
         content:
           !r.java.available && r.java.processes.length === 0 ? (
             <p className="text-sm dash-muted">
@@ -296,10 +297,15 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
               {r.java.error && (
                 <p className="text-sm text-amber-800 dark:text-amber-200/90">{r.java.error}</p>
               )}
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-4">
                 <MiniStat label="Runtimes" value={String(r.java.installation_count)} />
                 <MiniStat label="JDK" value={String(r.java.jdk_count)} />
                 <MiniStat label="JVMs" value={String(r.java.processes.length)} />
+                <MiniStat
+                  label="JVM issues"
+                  value={String(jvmIssues)}
+                  small={jvmIssues > 0}
+                />
               </div>
               {r.java.installations.length > 0 && (
                 <DataTable
@@ -314,6 +320,85 @@ export function HostPanel({ host, thresholds, isLive }: Props) {
                     j.javac_version ?? "—",
                   ])}
                 />
+              )}
+              {r.java.processes.some((p) => p.jvm?.available) && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wider dash-heading">
+                    JVM runtime (jcmd)
+                  </h4>
+                  {r.java.processes.map((p) => {
+                    const jvm = p.jvm;
+                    if (!jvm?.available) return null;
+                    const stressed =
+                      jvm.heap_pressure || jvm.excessive_gc || jvm.high_threads;
+                    return (
+                      <div
+                        key={`jvm-${p.pid}`}
+                        className={`rounded-xl border px-4 py-3 ${
+                          stressed
+                            ? "border-amber-200/90 bg-amber-50/50 dark:border-amber-500/25 dark:bg-amber-950/30"
+                            : "border-indigo-100/80 bg-indigo-50/30 dark:border-white/10 dark:bg-white/[0.03]"
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-baseline justify-between gap-2">
+                          <p className="font-mono text-sm font-semibold dash-title">
+                            pid {p.pid} · {p.name}
+                          </p>
+                          {jvm.heap_used_percent != null && (
+                            <span className="font-mono text-sm">
+                              heap {jvm.heap_used_percent}%
+                              {jvm.heap_max_bytes != null && (
+                                <span className="ml-1 text-xs dash-subtle">
+                                  ({fmtBytes(jvm.heap_used_bytes ?? 0)} /{" "}
+                                  {fmtBytes(jvm.heap_max_bytes)})
+                                </span>
+                              )}
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-3 text-xs dash-muted">
+                          {jvm.thread_count != null && (
+                            <span>threads <span className="font-mono">{jvm.thread_count}</span></span>
+                          )}
+                          {jvm.gc_time_percent != null && (
+                            <span>GC <span className="font-mono">{jvm.gc_time_percent}%</span></span>
+                          )}
+                          {jvm.young_gc_count != null && (
+                            <span>YGC <span className="font-mono">{jvm.young_gc_count}</span></span>
+                          )}
+                          {jvm.full_gc_count != null && (
+                            <span>FGC <span className="font-mono">{jvm.full_gc_count}</span></span>
+                          )}
+                          {jvm.uptime_seconds != null && (
+                            <span>
+                              uptime{" "}
+                              <span className="font-mono">
+                                {Math.round(jvm.uptime_seconds / 3600)}h
+                              </span>
+                            </span>
+                          )}
+                        </div>
+                        {jvm.heap_config && (
+                          <p className="mt-2 font-mono text-[11px] dash-subtle">{jvm.heap_config}</p>
+                        )}
+                        {jvm.jvm_args && (
+                          <code className="mt-2 block truncate rounded-lg bg-black/5 px-2 py-1 font-mono text-[10px] dark:bg-black/30">
+                            {jvm.jvm_args.length > 120
+                              ? jvm.jvm_args.slice(0, 120) + "…"
+                              : jvm.jvm_args}
+                          </code>
+                        )}
+                        {jvm.issues.length > 0 && (
+                          <ul className="mt-2 space-y-1 text-xs text-amber-800 dark:text-amber-200/90">
+                            {jvm.issues.map((issue, i) => (
+                              <li key={i}>• {issue}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               )}
               <DataTable
                 embedded
